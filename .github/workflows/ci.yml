@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ clang-format clang-tidy cppcheck
+
+      - name: Configure (strict)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_STRICT=ON
+
+      - name: Build
+        run: cmake --build build -j 2
+
+      - name: clang-format (check)
+        run: |
+          files=$(find src -type f $ -name "*.cpp" -o -name "*.hpp" -o -name "*.h" $)
+          clang-format --version
+          clang-format --dry-run --Werror $files
+
+      - name: clang-tidy
+        run: |
+          clang-tidy --version
+          clang-tidy -p build $(find src -name "*.cpp")
+
+      - name: cppcheck
+        run: |
+          cppcheck --version
+          cppcheck \
+            --project=build/compile_commands.json \
+            --enable=warning,style,performance,portability \
+            --inconclusive \
+            --error-exitcode=1 \
+            --inline-suppr
+
+      - name: Smoke test
+        run: |
+          printf "exit\n" | ./build/mini_shell
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++
+
+      - name: Configure (asan+ubsan + strict)
+        run: cmake -S . -B build-san -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_STRICT=ON -DENABLE_SANITIZERS=ON
+
+      - name: Build
+        run: cmake --build build-san -j 2
+
+      - name: Run (sanitizers)
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          printf "exit\n" | ./build-san/mini_shell

@@ -1,0 +1,65 @@
+@startuml components
+title диаграмма компонентов
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+package "CLI" {
+  [CLI] as Shell
+  [Tokenizer] as Tokenizer
+  [Parser] as Parser
+  [Expander] as Expander
+  [Executor] as Executor
+  [Environment] as Env
+  [CommandRegistry] as Registry
+  [Builtins] as Builtins
+  [Запуск внешних программ] as External
+}
+
+Shell --> Tokenizer : ввод
+Tokenizer --> Parser : токены
+Parser --> Expander : PipelineNode
+Expander --> Executor : ExecPipeline\n(готовые argv/env)
+
+Shell --> Env : чтение/обновление переменных
+Expander --> Env : поиск значений $NAME
+Executor --> Env : формирование окружения\nдля дочерних процессов
+
+Executor --> Registry : это builtin?
+Registry --> Builtins : найти/выполнить
+Executor --> External : fork/exec\n(если команда неизвестна)
+
+note right of Tokenizer
+Лексер отвечает за разбор кавычек и
+формирование токенов.
+
+Состояния:
+- обычный режим
+- 'одинарные кавычки'
+- "двойные кавычки"
+
+Результат: токены, из которых парсер
+собирает слова и пайплайны.
+end note
+
+note right of Expander
+Expander выполняет подстановки переменных.
+
+Правила:
+- в одинарных кавычках подстановок нет
+- в двойных кавычках $NAME разрешён
+- после подстановки НЕ делаем разбиение
+  на несколько аргументов по пробелам
+end note
+
+note right of Executor
+Executor запускает команды и пайплайны.
+
+Пайплайн реализуется средствами ОС:
+pipe(), fork(), dup2(), execvp().
+
+встроенные команды тоже запускаются
+в дочернем процессе, чтобы корректно
+работать в пайплайне.
+end note
+
+@enduml

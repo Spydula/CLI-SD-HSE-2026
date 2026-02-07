@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  checks:
+  linux-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,39 +15,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake g++ clang-format clang-tidy cppcheck
 
-      - name: Configure (strict)
+      - name: Configure
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_STRICT=ON \
+            -DBUILD_TESTING=ON \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
-        run: cmake --build build -j 2
+        run: cmake --build build -j $(nproc)
+
+      - name: Run Unit Tests
+        run: |
+          cd build
+          ctest --output-on-failure
 
       - name: clang-format (check)
         run: |
-          clang-format --version
-          find src -type f $ -name "*.cpp" -o -name "*.hpp" -o -name "*.h" $ -print0 \
+          find src include tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) -print0 \
             | xargs -0 clang-format --dry-run --Werror
 
       - name: clang-tidy
         run: |
-          clang-tidy --version
           clang-tidy -p build $(find src -name "*.cpp")
 
       - name: cppcheck
         run: |
-          cppcheck --version
-          cppcheck \
-            --project=build/compile_commands.json \
+          cppcheck --project=build/compile_commands.json \
             --enable=warning,style,performance,portability \
             --error-exitcode=1 \
             --inline-suppr
 
       - name: Smoke test
-        run: |
-          printf "exit\n" | ./build/mini_shell
+        run: printf "exit\n" | ./build/mini_shell
 
   sanitizers:
     runs-on: ubuntu-latest
@@ -59,23 +60,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake g++
 
-      - name: Configure (asan+ubsan + strict)
+      - name: Configure (ASan + UBSan)
         run: |
           cmake -S . -B build-san \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DENABLE_STRICT=ON \
-            -DENABLE_SANITIZERS=ON \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DENABLE_SANITIZERS=ON
 
       - name: Build
-        run: cmake --build build-san -j 2
+        run: cmake --build build-san -j $(nproc)
 
-      - name: Run (sanitizers)
+      - name: Run Tests with Sanitizers
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: |
-          printf "exit\n" | ./build-san/mini_shell
+          cd build-san
+          ctest --output-on-failure
+
+      - name: Smoke test (Sanitizers)
+        run: printf "exit\n" | ./build-san/mini_shell
 
   macos:
     runs-on: macos-latest
@@ -83,20 +87,44 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install tools
-        run: |
-          brew update
-          brew install cmake
+        run: brew install cmake
 
-      - name: Configure (strict)
+      - name: Configure
         run: |
           cmake -S . -B build-macos \
             -DCMAKE_BUILD_TYPE=Release \
-            -DENABLE_STRICT=ON \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DENABLE_STRICT=ON
 
       - name: Build
-        run: cmake --build build-macos -j 2
+        run: cmake --build build-macos -j $(sysctl -n hw.ncpu)
+
+      - name: Run Tests
+        run: |
+          cd build-macos
+          ctest --output-on-failure
 
       - name: Smoke test (macOS)
+        run: printf "exit\n" | ./build-macos/mini_shell
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
         run: |
-          printf "exit\n" | ./build-macos/mini_shell
+          cmake -S . -B build-win `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DENABLE_STRICT=ON
+
+      - name: Build
+        run: cmake --build build-win --config Release -j 2
+
+      - name: Run Tests
+        run: |
+          cd build-win
+          ctest -C Release --output-on-failure
+
+      - name: Smoke test (Windows)
+        shell: pwsh
+        run: echo "exit" | ./build-win/Release/mini_shell.exe

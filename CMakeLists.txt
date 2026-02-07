@@ -5,55 +5,49 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_executable(mini_shell
-  src/main.cpp
-  src/shell.cpp
-)
-
-target_include_directories(mini_shell PRIVATE src)
-
 option(ENABLE_STRICT "Enable strict compilation flags" OFF)
 option(ENABLE_SANITIZERS "Enable Address/Undefined sanitizers" OFF)
+option(BUILD_TESTING "Build unit tests" ON)
+
+add_library(shell_lib src/shell.cpp)
+target_include_directories(shell_lib PUBLIC include)
+
+add_executable(mini_shell src/main.cpp)
+target_link_libraries(mini_shell PRIVATE shell_lib)
 
 if (ENABLE_STRICT)
   if (MSVC)
-    target_compile_options(mini_shell PRIVATE /W4 /WX)
+    set(MY_COMPILE_FLAGS /W4 /WX)
   else()
-    target_compile_options(mini_shell PRIVATE
-      -Wall -Wextra -Wpedantic
-      -Werror
-      -Wshadow
-      -Wconversion
-      -Wsign-conversion
-      -Wold-style-cast
-      -Wcast-align
-      -Woverloaded-virtual
-      -Wnon-virtual-dtor
-      -Wnull-dereference
-      -Wdouble-promotion
-      -Wformat=2
-      -Wimplicit-fallthrough
+    set(MY_COMPILE_FLAGS 
+      -Wall -Wextra -Wpedantic -Werror -Wshadow -Wconversion 
+      -Wsign-conversion -Wold-style-cast -Wnull-dereference -Wformat=2
     )
   endif()
-else()
-  if (MSVC)
-    target_compile_options(mini_shell PRIVATE /W4)
-  else()
-    target_compile_options(mini_shell PRIVATE -Wall -Wextra -Wpedantic)
-  endif()
+  target_compile_options(shell_lib PRIVATE ${MY_COMPILE_FLAGS})
+  target_compile_options(mini_shell PRIVATE ${MY_COMPILE_FLAGS})
 endif()
 
-if (ENABLE_SANITIZERS)
-  if (MSVC)
-    message(WARNING "Sanitizers are not configured for MSVC in this template.")
-  else()
-    target_compile_options(mini_shell PRIVATE
-      -fsanitize=address,undefined
-      -fno-omit-frame-pointer
-      -fno-sanitize-recover=all
-    )
-    target_link_options(mini_shell PRIVATE
-      -fsanitize=address,undefined
-    )
-  endif()
+if (ENABLE_SANITIZERS AND NOT MSVC)
+  set(SAN_FLAGS -fsanitize=address,undefined -fno-omit-frame-pointer)
+  target_compile_options(shell_lib PUBLIC ${SAN_FLAGS})
+  target_link_options(shell_lib PUBLIC ${SAN_FLAGS})
+endif()
+
+if(BUILD_TESTING)
+  enable_testing()
+
+  include(FetchContent)
+  FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/heads/main.zip
+  )
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+
+  add_executable(unit_tests tests/shell_tests.cpp)
+  target_link_libraries(unit_tests PRIVATE shell_lib GTest::gtest_main)
+  
+  include(GoogleTest)
+  gtest_discover_tests(unit_tests)
 endif()

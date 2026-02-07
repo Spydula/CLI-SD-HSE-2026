@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "shell.hpp"
 #include <sstream>
+#include "shell.hpp"
 
 TEST(ShellParser, QuotesTest) {
-    EXPECT_TRUE(true); // Заглушка
+    EXPECT_TRUE(true);  // Заглушка
 }

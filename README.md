@@ -90,13 +90,13 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
 ```
 
-запуск приложения 
+Запуск приложения 
 
 ```bash
 ./build/mini_shell
 ```
 
-запуск тестов
+Запуск тестов
 
 ```bash
 ./build/unit_tests

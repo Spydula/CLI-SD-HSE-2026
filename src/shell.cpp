@@ -36,7 +36,7 @@ std::optional<std::string> Environment::get(std::string_view name) const {
     return it->second;
 }
 
-std::map<std::string, std::string> Environment::snapshot() const {
+const std::map<std::string, std::string> &Environment::snapshot() const {
     return vars_;
 }
 
@@ -64,7 +64,7 @@ Environment Environment::fromProcessEnvironment() {
 
 // ---------------- Tokenizer ----------------
 
-std::vector<std::string> Tokenizer::tokenize(std::string_view line) const {
+std::vector<std::string> Tokenizer::tokenize(std::string_view line) {
     enum class State { Normal, InSingle, InDouble };
 
     State st = State::Normal;
@@ -370,7 +370,9 @@ ExecResult Shell::runExternal(const std::vector<std::string> &argv, std::ostream
     argsStorage[0] = fullPath;  // argv[0] обычно путь к программе
     std::vector<char *> args;
     args.reserve(argsStorage.size() + 1);
+    // cppcheck-suppress constVariableReference
     for (auto &s : argsStorage)
+        // cppcheck-suppress useStlAlgorithm
         args.push_back(s.data());
     args.push_back(nullptr);
 
@@ -383,7 +385,9 @@ ExecResult Shell::runExternal(const std::vector<std::string> &argv, std::ostream
 
     std::vector<char *> envp;
     envp.reserve(envStorage.size() + 1);
+    // cppcheck-suppress constVariableReference
     for (auto &s : envStorage)
+        // cppcheck-suppress useStlAlgorithm
         envp.push_back(s.data());
     envp.push_back(nullptr);
 

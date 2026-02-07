@@ -35,7 +35,7 @@ public:
      * @brief Получить снимок всех переменных окружения.
      * @return map со всеми переменными.
      */
-    std::map<std::string, std::string> snapshot() const;
+    const std::map<std::string, std::string> &snapshot() const;
 
     /**
      * @brief Инициализировать окружение значениями из окружения текущего процесса.
@@ -73,7 +73,7 @@ public:
      * @return Вектор аргументов. Может быть пустым для пустой строки.
      * @throws std::runtime_error при незакрытых кавычках.
      */
-    std::vector<std::string> tokenize(std::string_view line) const;
+    static std::vector<std::string> tokenize(std::string_view line);
 };
 
 /**
@@ -125,33 +125,33 @@ private:
     /**
      * @brief Встроенная команда cat.
      */
-    ExecResult builtinCat(const std::vector<std::string> &argv,
-                          std::ostream &out,
-                          std::ostream &err);
+    static ExecResult builtinCat(const std::vector<std::string> &argv,
+                                 std::ostream &out,
+                                 std::ostream &err);
 
     /**
      * @brief Встроенная команда echo.
      */
-    ExecResult builtinEcho(const std::vector<std::string> &argv,
-                           std::ostream &out,
-                           std::ostream &err);
+    static ExecResult builtinEcho(const std::vector<std::string> &argv,
+                                  std::ostream &out,
+                                  std::ostream &err);
 
     /**
      * @brief Встроенная команда wc.
      */
-    ExecResult builtinWc(const std::vector<std::string> &argv,
-                         std::ostream &out,
-                         std::ostream &err);
+    static ExecResult builtinWc(const std::vector<std::string> &argv,
+                                std::ostream &out,
+                                std::ostream &err);
 
     /**
      * @brief Встроенная команда pwd.
      */
-    ExecResult builtinPwd(std::ostream &out, std::ostream &err);
+    static ExecResult builtinPwd(std::ostream &out, std::ostream &err);
 
     /**
      * @brief Встроенная команда exit.
      */
-    ExecResult builtinExit();
+    static ExecResult builtinExit();
 
     /**
      * @brief Запустить внешнюю программу.

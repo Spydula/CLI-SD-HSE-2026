@@ -274,6 +274,7 @@ ExecResult Shell::builtinCat(const std::vector<std::string> &argv,
     return ExecResult{0, false};
 }
 
+// cpp-check suppress constParameterReference
 ExecResult Shell::builtinWc(const std::vector<std::string> &argv,
                             std::ostream &out,
                             std::ostream &err) {

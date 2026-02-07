@@ -245,7 +245,7 @@ ExecResult Shell::builtinPwd(std::ostream &out, std::ostream &err) {
 
 ExecResult Shell::builtinEcho(const std::vector<std::string> &argv,
                               std::ostream &out,
-                              std::ostream &err) {
+                              std::ostream &err) {  // cpp-check suppress constParameterReference
     (void)err;
     for (size_t i = 1; i < argv.size(); ++i) {
         if (i > 1)

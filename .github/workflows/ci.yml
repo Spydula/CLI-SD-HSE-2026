@@ -38,7 +38,7 @@ jobs:
 
       - name: clang-tidy
         run: |
-          clang-tidy -p build $(find src -name "*.cpp")
+          clang-tidy -p build $(find src tests -name "*.cpp")
 
       - name: cppcheck
         run: |

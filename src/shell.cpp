@@ -245,7 +245,7 @@ ExecResult Shell::builtinPwd(std::ostream &out, std::ostream &err) {
 
 ExecResult Shell::builtinEcho(const std::vector<std::string> &argv,
                               std::ostream &out,
-                              std::ostream &err) {  // cpp-check suppress constParameterReference
+                              std::ostream &err) {  // cppcheck-suppress constParameterReference
     (void)err;
     for (size_t i = 1; i < argv.size(); ++i) {
         if (i > 1)
@@ -276,7 +276,7 @@ ExecResult Shell::builtinCat(const std::vector<std::string> &argv,
 
 ExecResult Shell::builtinWc(const std::vector<std::string> &argv,
                             std::ostream &out,
-                            std::ostream &err) {  // cpp-check suppress constParameterReference
+                            std::ostream &err) {
     if (argv.size() != 2) {
         err << "wc: usage: wc <FILE>\n";
         return ExecResult{2, false};

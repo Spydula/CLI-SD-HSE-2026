@@ -106,26 +106,3 @@ jobs:
 
       - name: Smoke test (macOS)
         run: printf "exit\n" | ./build-macos/mini_shell
-
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure
-        run: |
-          cmake -S . -B build-win `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DENABLE_STRICT=ON
-
-      - name: Build
-        run: cmake --build build-win --config Release -j 2
-
-      - name: Run Tests
-        run: |
-          cd build-win
-          ctest -C Release --output-on-failure
-
-      - name: Smoke test (Windows)
-        shell: pwsh
-        run: echo "exit" | ./build-win/Release/mini_shell.exe

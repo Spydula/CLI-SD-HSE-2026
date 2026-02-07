@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
+    branches: [ master ]
   pull_request:
+    branches: [ master ]
 
 jobs:
   linux-checks:
@@ -26,6 +28,9 @@ jobs:
       - name: Build
         run: cmake --build build -j $(nproc)
 
+      - name: Smoke test
+        run: printf "exit\n" | ./build/mini_shell
+
       - name: Run Unit Tests
         run: |
           cd build
@@ -48,9 +53,6 @@ jobs:
             --error-exitcode=1 \
             --inline-suppr
 
-      - name: Smoke test
-        run: printf "exit\n" | ./build/mini_shell
-
   sanitizers:
     runs-on: ubuntu-latest
     steps:
@@ -71,6 +73,9 @@ jobs:
       - name: Build
         run: cmake --build build-san -j $(nproc)
 
+      - name: Smoke test (Sanitizers)
+        run: printf "exit\n" | ./build-san/mini_shell
+
       - name: Run Tests with Sanitizers
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
@@ -78,9 +83,6 @@ jobs:
         run: |
           cd build-san
           ctest --output-on-failure
-
-      - name: Smoke test (Sanitizers)
-        run: printf "exit\n" | ./build-san/mini_shell
 
   macos:
     runs-on: macos-latest
@@ -98,11 +100,11 @@ jobs:
 
       - name: Build
         run: cmake --build build-macos -j $(sysctl -n hw.ncpu)
+      
+      - name: Smoke test (macOS)
+        run: printf "exit\n" | ./build-macos/mini_shell
 
       - name: Run Tests
         run: |
           cd build-macos
           ctest --output-on-failure
-
-      - name: Smoke test (macOS)
-        run: printf "exit\n" | ./build-macos/mini_shell

@@ -90,6 +90,18 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
 ```
 
+запуск приложения 
+
+```bash
+./build/mini_shell
+```
+
+запуск тестов
+
+```bash
+./build/unit_tests
+```
+
 ## 6. CI
 
 В репозитории настроен CI (сборка и проверки). Детали — в .github/workflows/ci.yml

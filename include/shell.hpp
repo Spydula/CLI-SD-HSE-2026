@@ -17,43 +17,43 @@ namespace minishell {
  */
 class Environment {
 public:
-  /**
-   * @brief Установить/обновить переменную окружения.
-   * @param name Имя переменной (например, "PATH").
-   * @param value Значение переменной.
-   */
-  void set(std::string name, std::string value);
+    /**
+     * @brief Установить/обновить переменную окружения.
+     * @param name Имя переменной (например, "PATH").
+     * @param value Значение переменной.
+     */
+    void set(std::string name, std::string value);
 
-  /**
-   * @brief Получить значение переменной окружения.
-   * @param name Имя переменной.
-   * @return Значение, если переменная существует.
-   */
-  std::optional<std::string> get(std::string_view name) const;
+    /**
+     * @brief Получить значение переменной окружения.
+     * @param name Имя переменной.
+     * @return Значение, если переменная существует.
+     */
+    std::optional<std::string> get(std::string_view name) const;
 
-  /**
-   * @brief Получить снимок всех переменных окружения.
-   * @return map со всеми переменными.
-   */
-  std::map<std::string, std::string> snapshot() const;
+    /**
+     * @brief Получить снимок всех переменных окружения.
+     * @return map со всеми переменными.
+     */
+    std::map<std::string, std::string> snapshot() const;
 
-  /**
-   * @brief Инициализировать окружение значениями из окружения текущего процесса.
-   */
-  static Environment fromProcessEnvironment();
+    /**
+     * @brief Инициализировать окружение значениями из окружения текущего процесса.
+     */
+    static Environment fromProcessEnvironment();
 
 private:
-  std::map<std::string, std::string> vars_;
+    std::map<std::string, std::string> vars_;
 };
 
 /**
  * @brief Результат выполнения команды/строки.
  */
 struct ExecResult {
-  /** @brief Код возврата (0 — успех). */
-  int exitCode = 0;
-  /** @brief Нужно ли завершить REPL (команда exit). */
-  bool shouldExit = false;
+    /** @brief Код возврата (0 — успех). */
+    int exitCode = 0;
+    /** @brief Нужно ли завершить REPL (команда exit). */
+    bool shouldExit = false;
 };
 
 /**
@@ -67,13 +67,13 @@ struct ExecResult {
  */
 class Tokenizer {
 public:
-  /**
-   * @brief Разбить строку на аргументы (argv).
-   * @param line Строка ввода пользователя.
-   * @return Вектор аргументов. Может быть пустым для пустой строки.
-   * @throws std::runtime_error при незакрытых кавычках.
-   */
-  std::vector<std::string> tokenize(std::string_view line) const;
+    /**
+     * @brief Разбить строку на аргументы (argv).
+     * @param line Строка ввода пользователя.
+     * @return Вектор аргументов. Может быть пустым для пустой строки.
+     * @throws std::runtime_error при незакрытых кавычках.
+     */
+    std::vector<std::string> tokenize(std::string_view line) const;
 };
 
 /**
@@ -81,89 +81,97 @@ public:
  */
 class Shell {
 public:
-  /**
-   * @brief Создать shell с окружением, инициализированным из окружения процесса.
-   */
-  Shell();
+    /**
+     * @brief Создать shell с окружением, инициализированным из окружения процесса.
+     */
+    Shell();
 
-  /**
-   * @brief Запустить Read-Execute-Print Loop.
-   * @param in Поток ввода (обычно std::cin).
-   * @param out Поток вывода (обычно std::cout).
-   * @param err Поток ошибок (обычно std::cerr).
-   * @return Код завершения интерпретатора.
-   */
-  int run(std::istream& in, std::ostream& out, std::ostream& err);
+    /**
+     * @brief Запустить Read-Execute-Print Loop.
+     * @param in Поток ввода (обычно std::cin).
+     * @param out Поток вывода (обычно std::cout).
+     * @param err Поток ошибок (обычно std::cerr).
+     * @return Код завершения интерпретатора.
+     */
+    int run(std::istream &in, std::ostream &out, std::ostream &err);
 
-  /**
-   * @brief Выполнить одну строку (удобно для unit-тестов).
-   * @param line Строка ввода.
-   * @param out Поток вывода.
-   * @param err Поток ошибок.
-   * @return Результат выполнения.
-   */
-  ExecResult executeLine(std::string_view line, std::ostream& out, std::ostream& err);
+    /**
+     * @brief Выполнить одну строку (удобно для unit-тестов).
+     * @param line Строка ввода.
+     * @param out Поток вывода.
+     * @param err Поток ошибок.
+     * @return Результат выполнения.
+     */
+    ExecResult executeLine(std::string_view line, std::ostream &out, std::ostream &err);
 
-  /**
-   * @brief Доступ к окружению интерпретатора.
-   */
-  Environment& env();
+    /**
+     * @brief Доступ к окружению интерпретатора.
+     */
+    Environment &env();
 
-  /**
-   * @brief Доступ к окружению интерпретатора (const).
-   */
-  const Environment& env() const;
+    /**
+     * @brief Доступ к окружению интерпретатора (const).
+     */
+    const Environment &env() const;
 
 private:
-  /**
-   * @brief Выполнить уже разобранный argv.
-   */
-  ExecResult executeArgv(const std::vector<std::string>& argv, std::ostream& out, std::ostream& err);
+    /**
+     * @brief Выполнить уже разобранный argv.
+     */
+    ExecResult executeArgv(const std::vector<std::string> &argv,
+                           std::ostream &out,
+                           std::ostream &err);
 
-  /**
-   * @brief Встроенная команда cat.
-   */
-  ExecResult builtinCat(const std::vector<std::string>& argv, std::ostream& out, std::ostream& err);
+    /**
+     * @brief Встроенная команда cat.
+     */
+    ExecResult builtinCat(const std::vector<std::string> &argv,
+                          std::ostream &out,
+                          std::ostream &err);
 
-  /**
-   * @brief Встроенная команда echo.
-   */
-  ExecResult builtinEcho(const std::vector<std::string>& argv, std::ostream& out, std::ostream& err);
+    /**
+     * @brief Встроенная команда echo.
+     */
+    ExecResult builtinEcho(const std::vector<std::string> &argv,
+                           std::ostream &out,
+                           std::ostream &err);
 
-  /**
-   * @brief Встроенная команда wc.
-   */
-  ExecResult builtinWc(const std::vector<std::string>& argv, std::ostream& out, std::ostream& err);
+    /**
+     * @brief Встроенная команда wc.
+     */
+    ExecResult builtinWc(const std::vector<std::string> &argv,
+                         std::ostream &out,
+                         std::ostream &err);
 
-  /**
-   * @brief Встроенная команда pwd.
-   */
-  ExecResult builtinPwd(std::ostream& out, std::ostream& err);
+    /**
+     * @brief Встроенная команда pwd.
+     */
+    ExecResult builtinPwd(std::ostream &out, std::ostream &err);
 
-  /**
-   * @brief Встроенная команда exit.
-   */
-  ExecResult builtinExit();
+    /**
+     * @brief Встроенная команда exit.
+     */
+    ExecResult builtinExit();
 
-  /**
-   * @brief Запустить внешнюю программу.
-   */
-  ExecResult runExternal(const std::vector<std::string>& argv, std::ostream& err);
+    /**
+     * @brief Запустить внешнюю программу.
+     */
+    ExecResult runExternal(const std::vector<std::string> &argv, std::ostream &err);
 
-  /**
-   * @brief Обработать строку, состоящую только из присваиваний NAME=value.
-   *
-   * Если каждый аргумент имеет вид NAME=value, то переменные сохраняются в env_,
-   * команда не исполняется, возвращается true.
-   *
-   * @param argv Аргументы строки.
-   * @param err Поток ошибок (для сообщений о некорректных именах).
-   * @return true если строка обработана как присваивания.
-   */
-  bool tryHandleAssignmentsOnly(const std::vector<std::string>& argv, std::ostream& err);
+    /**
+     * @brief Обработать строку, состоящую только из присваиваний NAME=value.
+     *
+     * Если каждый аргумент имеет вид NAME=value, то переменные сохраняются в env_,
+     * команда не исполняется, возвращается true.
+     *
+     * @param argv Аргументы строки.
+     * @param err Поток ошибок (для сообщений о некорректных именах).
+     * @return true если строка обработана как присваивания.
+     */
+    bool tryHandleAssignmentsOnly(const std::vector<std::string> &argv, std::ostream &err);
 
-  Environment env_;
-  Tokenizer tokenizer_;
+    Environment env_;
+    Tokenizer tokenizer_;
 };
 
 }  // namespace minishell

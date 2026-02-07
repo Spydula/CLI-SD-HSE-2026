@@ -16,7 +16,11 @@ jobs:
           sudo apt-get install -y cmake g++ clang-format clang-tidy cppcheck
 
       - name: Configure (strict)
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_STRICT=ON
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_STRICT=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         run: cmake --build build -j 2
@@ -56,7 +60,12 @@ jobs:
           sudo apt-get install -y cmake g++
 
       - name: Configure (asan+ubsan + strict)
-        run: cmake -S . -B build-san -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_STRICT=ON -DENABLE_SANITIZERS=ON
+        run: |
+          cmake -S . -B build-san \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DENABLE_STRICT=ON \
+            -DENABLE_SANITIZERS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         run: cmake --build build-san -j 2
@@ -67,3 +76,27 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: |
           printf "exit\n" | ./build-san/mini_shell
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          brew update
+          brew install cmake
+
+      - name: Configure (strict)
+        run: |
+          cmake -S . -B build-macos \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_STRICT=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: cmake --build build-macos -j 2
+
+      - name: Smoke test (macOS)
+        run: |
+          printf "exit\n" | ./build-macos/mini_shell

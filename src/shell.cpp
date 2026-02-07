@@ -19,6 +19,10 @@
   #include <crt_externs.h>
 #endif
 
+#if !defined(__APPLE__)
+extern "C" char** environ;
+#endif
+
 namespace minishell {
 
 // ---------------- Environment ----------------
@@ -36,11 +40,12 @@ std::map<std::string, std::string> Environment::snapshot() const { return vars_;
 Environment Environment::fromProcessEnvironment() {
   Environment env;
 
+  char** p = nullptr;
+
 #if defined(__APPLE__)
-  char** p = *_NSGetEnviron();
+  p = *_NSGetEnviron();
 #else
-  extern char** environ;
-  char** p = environ;
+  p = ::environ;
 #endif
 
   for (; p && *p; ++p) {

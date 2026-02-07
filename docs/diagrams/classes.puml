@@ -1,24 +1,42 @@
 @startuml classes
-title диаграмма классы
+title Интерпретатор командной строки — ключевые классы (подстановка до токенизации)
 skinparam shadowing false
 skinparam classAttributeIconSize 0
 
 class Shell {
   - Environment env
+  - Expander expander
   - Lexer lexer
   - Parser parser
-  - Expander expander
   - Executor executor
   + int run()
   + void runLine(string line)
 }
 
+' ====== Pre-expansion ======
+class Expander {
+  + string expandLine(string rawLine, Environment env)
+  - string expandVar(string name, Environment env)
+}
+
+note right of Expander
+expandLine выполняет подстановки $NAME с учётом кавычек:
+- в '...' подстановок нет
+- в "..." подстановки есть
+- вне кавычек подстановки есть
+
+Если значение содержит пробелы, Expander
+оборачивает вставку служебными маркерами,
+чтобы Lexer не разделил её на несколько аргументов.
+end note
+
+' ====== Lexing/Parsing ======
 class Lexer {
   + vector<Token> tokenize(string line)
 }
 
 enum TokenType {
-  WORD_PART
+  WORD
   PIPE
   EOL
 }
@@ -26,12 +44,6 @@ enum TokenType {
 class Token {
   + TokenType type
   + string text
-  + SegmentKind segmentKind
-}
-
-enum SegmentKind {
-  Literal  ' обычный текст
-  VarRef   ' ссылка на переменную ($NAME)
 }
 
 class Parser {
@@ -43,39 +55,16 @@ class PipelineNode {
 }
 
 class CommandNode {
-  + vector<WordNode> words
   + vector<AssignmentNode> assignments
-}
-
-class WordNode {
-  + vector<Segment> segments
-}
-
-class Segment {
-  + SegmentKind kind
-  + string text  ' literal-текст ИЛИ имя переменной
+  + vector<string> words
 }
 
 class AssignmentNode {
   + string name
-  + WordNode value
+  + string value
 }
 
-class Expander {
-  + ExecPipeline expand(PipelineNode ast, Environment env)
-  - string expandWord(WordNode w, Environment env)
-}
-
-class ExecPipeline {
-  + vector<CommandInvocation> stages
-}
-
-class CommandInvocation {
-  + string program
-  + vector<string> argv
-  + map<string,string> envOverlay
-}
-
+' ====== Environment ======
 class Environment {
   - map<string,string> vars
   + void set(string name, string value)
@@ -83,9 +72,10 @@ class Environment {
   + map<string,string> snapshot() const
 }
 
+' ====== Commands ======
 interface IShellCommand {
   + string name() const
-  + int run(vector<string> argv, IStream& in, IStream& out, IStream& err, Environment& env)
+  + int run(vector<string> argv, int inFd, int outFd, int errFd, Environment& env)
 }
 
 class CommandRegistry {
@@ -94,63 +84,39 @@ class CommandRegistry {
   + IShellCommand* find(string name) const
 }
 
+' ====== Execution ======
 class Executor {
   - CommandRegistry& registry
   - ExternalProgramRunner external
-  + int execute(ExecPipeline pipeline, Environment& env)
-  - int runPipeline(vector<CommandInvocation> stages, Environment& env)
-  - int runStage(CommandInvocation cmd, int inFd, int outFd, Environment& env)
+  + int execute(PipelineNode pipeline, Environment& env)
 }
 
 class ExternalProgramRunner {
-  + void exec(CommandInvocation cmd, map<string,string> env)
+  + [[noreturn]] void exec(string program, vector<string> argv, map<string,string> env)
 }
 
+Shell --> Expander
 Shell --> Lexer
 Shell --> Parser
-Shell --> Expander
 Shell --> Executor
 Shell --> Environment
 
+Expander --> Environment
 Lexer --> Token
 Token --> TokenType
-Token --> SegmentKind
-
 Parser --> PipelineNode
 PipelineNode --> CommandNode
-CommandNode --> WordNode
 CommandNode --> AssignmentNode
-WordNode --> Segment
-Segment --> SegmentKind
-AssignmentNode --> WordNode
-
-Expander --> ExecPipeline
-ExecPipeline --> CommandInvocation
-Expander --> Environment
 
 Executor --> CommandRegistry
 CommandRegistry --> IShellCommand
 Executor --> ExternalProgramRunner
 Executor --> Environment
 
-note right of IShellCommand
-Встроенные команды: cat, echo, wc, pwd, exit.
-
-Чтобы поддержать пайплайны, встроенная команда
-должна уметь читать из входного потока и писать
-в выходной поток (или работать через fd).
-end note
-
-note bottom of ExternalProgramRunner
-Запуск внешней программы выполняется через ОС:
-fork/execvp, а окружение передаётся как envp.
-end note
-
-note bottom of CommandInvocation
-argv хранится уже после:
-- обработки кавычек
-- подстановок $NAME
-То есть Executor не занимается парсингом строки.
+note bottom of IShellCommand
+Используем fd (inFd/outFd/errFd), чтобы:
+- builtins могли работать в пайплайне
+- Executor мог настраивать потоки через dup2
 end note
 
 @enduml

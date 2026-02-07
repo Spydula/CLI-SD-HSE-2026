@@ -43,6 +43,7 @@ jobs:
       - name: cppcheck
         run: |
           cppcheck --project=build/compile_commands.json \
+            -i build/_deps \
             --enable=warning,style,performance,portability \
             --error-exitcode=1 \
             --inline-suppr

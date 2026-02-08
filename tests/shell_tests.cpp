@@ -123,3 +123,54 @@ TEST_F(ShellTest, ExternalCommandExecution) {
     EXPECT_NE(res.exitCode, 127);
     EXPECT_EQ(res.exitCode, 0);
 }
+
+TEST_F(ShellTest, TokenizerConcatenatedQuotedParts) {
+    minishell::Tokenizer t;
+    auto args = t.tokenize("echo ab\"cd ef\"gh");
+    ASSERT_EQ(args.size(), 2);
+    EXPECT_EQ(args[1], "abcd efgh");
+}
+
+TEST_F(ShellTest, TokenizerConcatenatedSingleQuotes) {
+    minishell::Tokenizer t;
+    auto args = t.tokenize("echo ab'cd ef'gh");
+    ASSERT_EQ(args.size(), 2);
+    EXPECT_EQ(args[1], "abcd efgh");
+}
+
+TEST_F(ShellTest, MultipleAssignmentsInShell) {
+    minishell::ExecResult res = shell.executeLine("A=1 B=2", out, err);
+    EXPECT_EQ(res.exitCode, 0);
+    EXPECT_FALSE(res.shouldExit);
+    EXPECT_EQ(shell.env().get("A"), "1");
+    EXPECT_EQ(shell.env().get("B"), "2");
+}
+
+TEST_F(ShellTest, InvalidAssignmentName) {
+    minishell::ExecResult res = shell.executeLine("1A=2", out, err);
+    EXPECT_FALSE(res.exitCode == 0);
+    EXPECT_FALSE(err.str().empty());
+}
+
+TEST_F(ShellFileTest, BuiltinWcWhitespaceWords) {
+    const std::string file = "test_ws.txt";
+    const std::string text = "a\tb  c\n\n";
+    {
+        std::ofstream f(file);
+        f << text;
+    }
+
+    shell.executeLine("wc " + file, out, err);
+    // lines = 2 (две '\n'), words = 3 (a,b,c), bytes = text.size()
+    std::ostringstream expected;
+    expected << 2 << " " << 3 << " " << text.size() << "\n";
+    EXPECT_EQ(out.str(), expected.str());
+
+    std::filesystem::remove(file);
+}
+
+TEST_F(ShellTest, ExternalCommandReceivesEnvironment) {
+    shell.env().set("MY_TEST_VAR", "hello");
+    minishell::ExecResult res = shell.executeLine("sh -c '[ \"$MY_TEST_VAR\" = hello ]'", out, err);
+    EXPECT_EQ(res.exitCode, 0);
+}

@@ -42,7 +42,6 @@ const std::map<std::string, std::string> &Environment::snapshot() const {
 
 Environment Environment::fromProcessEnvironment() {
     Environment env;
-
     char **p = nullptr;
 
 #if defined(__APPLE__)
@@ -150,7 +149,6 @@ Shell::Shell() : env_(Environment::fromProcessEnvironment()) {
 int Shell::run(std::istream &in, std::ostream &out, std::ostream &err) {
     std::string line;
     while (true) {
-        // Промпт не печатаем, чтобы не мешать автотестам.
         if (!std::getline(in, line))
             break;
 
@@ -313,7 +311,7 @@ ExecResult Shell::builtinWc(const std::vector<std::string> &argv,
     return ExecResult{0, false};
 }
 
-// ---------------- External execution (POSIX) ----------------
+// ---------------- External execution ----------------
 
 static bool isExecutableFile(const std::filesystem::path &p) {
     std::error_code ec;
@@ -365,9 +363,8 @@ ExecResult Shell::runExternal(const std::vector<std::string> &argv, std::ostream
     const std::string fullPath = *fullPathOpt;
 
     // 2) Формируем argv для execve: массив char* с nullptr в конце.
-    // Важно: память должна жить в дочернем процессе до execve.
     std::vector<std::string> argsStorage = argv;
-    argsStorage[0] = fullPath;  // argv[0] обычно путь к программе
+    argsStorage[0] = fullPath;
     std::vector<char *> args;
     args.reserve(argsStorage.size() + 1);
     // cppcheck-suppress constVariableReference

@@ -136,7 +136,6 @@ std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(
     };
 
     auto expandVarAt = [&](size_t &i) {
-        // We are at '$'. Expand $NAME where NAME = [A-Za-z_][A-Za-z0-9_]*.
         size_t j = i + 1;
         if (j >= line.size()) {
             cur.push_back('$');
@@ -147,7 +146,6 @@ std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(
         auto isAlnumUnd = [](unsigned char ch) { return std::isalnum(ch) || ch == '_'; };
 
         if (!isAlphaUnd(static_cast<unsigned char>(line[j]))) {
-            // Not a variable name start: treat '$' as literal.
             cur.push_back('$');
             return;
         }
@@ -163,9 +161,8 @@ std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(
         if (auto v = env.get(name); v.has_value()) {
             cur += *v;
         }
-        // If var missing: expand to empty string.
 
-        i = j - 1;  // caller will ++i
+        i = j - 1;
     };
 
     for (size_t i = 0; i < line.size(); ++i) {
@@ -193,7 +190,6 @@ std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(
                 if (c == '\'') {
                     st = State::Normal;
                 } else {
-                    // No expansion in single quotes.
                     cur.push_back(c);
                 }
                 break;
@@ -202,7 +198,6 @@ std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(
                 if (c == '"') {
                     st = State::Normal;
                 } else if (c == '$') {
-                    // Expansion is enabled in double quotes.
                     expandVarAt(i);
                 } else {
                     cur.push_back(c);
@@ -271,7 +266,6 @@ ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ost
     if (tokens.empty())
         return ExecResult{0, false};
 
-    // Split by pipes.
     std::vector<std::vector<std::string>> stages;
     std::vector<std::string> cur;
     for (const auto &t : tokens) {
@@ -291,7 +285,6 @@ ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ost
     if (stages.empty())
         return ExecResult{0, false};
 
-    // Single command: keep part-1 behavior.
     if (stages.size() == 1) {
         const auto &argv = stages[0];
         if (tryHandleAssignmentsOnly(argv, err)) {
@@ -299,12 +292,6 @@ ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ost
         }
         return executeArgv(argv, out, err);
     }
-
-    // Pipeline execution:
-    // - stdout is piped stage-to-stage.
-    // - stderr of all stages goes to one shared pipe and is collected by parent.
-    // - final stdout is collected by parent and written into 'out' stream.
-    // - exit code is exit code of last stage.
 
     int errPipe[2] = {-1, -1};
     if (::pipe(errPipe) != 0) {
@@ -357,23 +344,18 @@ ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ost
         }
 
         if (pid == 0) {
-            // Child.
-            // stderr -> shared errPipe
             ::dup2(errPipe[1], STDERR_FILENO);
 
-            // stdin
             if (prevRead != -1) {
                 ::dup2(prevRead, STDIN_FILENO);
             }
 
-            // stdout
             if (isLast) {
                 ::dup2(outPipe[1], STDOUT_FILENO);
             } else {
                 ::dup2(nextPipe[1], STDOUT_FILENO);
             }
 
-            // Close fds we don't need.
             if (prevRead != -1)
                 ::close(prevRead);
             if (!isLast) {
@@ -385,13 +367,10 @@ ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ost
             ::close(outPipe[0]);
             ::close(outPipe[1]);
 
-            // Execute stage. We intentionally do not exit the whole REPL
-            // even if the stage is 'exit' (it only exits this process).
             ExecResult r = executeArgv(stages[i], std::cout, std::cerr);
             _exit(r.exitCode);
         }
 
-        // Parent.
         pids.push_back(pid);
         if (prevRead != -1)
             ::close(prevRead);
@@ -404,11 +383,9 @@ ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ost
         }
     }
 
-    // Parent: close write ends for collectors.
     ::close(errPipe[1]);
     ::close(outPipe[1]);
 
-    // Collect stdout and stderr.
     auto drainFdToStream = [](int fd, std::ostream &os) {
         char buf[4096];
         while (true) {
@@ -530,7 +507,6 @@ ExecResult Shell::builtinCat(const std::vector<std::string> &argv,
                              std::ostream &out,
                              std::ostream &err) {
     if (argv.size() == 1) {
-        // Read from stdin.
         out << std::cin.rdbuf();
         return ExecResult{0, false};
     }

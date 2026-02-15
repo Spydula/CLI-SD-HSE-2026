@@ -74,7 +74,19 @@ public:
      * @throws std::runtime_error при незакрытых кавычках.
      */
     static std::vector<std::string> tokenize(std::string_view line);
+
+    /**
+     * @brief Разобрать строку с поддержкой пайпов '|' и подстановок $VAR.
+     *        Кавычки: одинарные блокируют подстановки, двойные разрешают.
+     * @throws std::runtime_error при незакрытых кавычках.
+     */
+    static std::vector<std::string> tokenizeWithPipesAndExpansion(
+        std::string_view line,
+        const Environment& env
+    );
 };
+
+
 
 /**
  * @brief Основной класс интерпретатора: REPL + выполнение команд.

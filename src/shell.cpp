@@ -119,6 +119,106 @@ std::vector<std::string> Tokenizer::tokenize(std::string_view line) {
     return argv;
 }
 
+std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(
+    std::string_view line,
+    const Environment &env) {
+    enum class State { Normal, InSingle, InDouble };
+
+    State st = State::Normal;
+    std::vector<std::string> argv;
+    std::string cur;
+
+    auto flush = [&]() {
+        if (!cur.empty()) {
+            argv.push_back(cur);
+            cur.clear();
+        }
+    };
+
+    auto expandVarAt = [&](size_t &i) {
+        // We are at '$'. Expand $NAME where NAME = [A-Za-z_][A-Za-z0-9_]*.
+        size_t j = i + 1;
+        if (j >= line.size()) {
+            cur.push_back('$');
+            return;
+        }
+
+        auto isAlphaUnd = [](unsigned char ch) { return std::isalpha(ch) || ch == '_'; };
+        auto isAlnumUnd = [](unsigned char ch) { return std::isalnum(ch) || ch == '_'; };
+
+        if (!isAlphaUnd(static_cast<unsigned char>(line[j]))) {
+            // Not a variable name start: treat '$' as literal.
+            cur.push_back('$');
+            return;
+        }
+
+        std::string name;
+        name.push_back(static_cast<char>(line[j]));
+        ++j;
+        while (j < line.size() && isAlnumUnd(static_cast<unsigned char>(line[j]))) {
+            name.push_back(static_cast<char>(line[j]));
+            ++j;
+        }
+
+        if (auto v = env.get(name); v.has_value()) {
+            cur += *v;
+        }
+        // If var missing: expand to empty string.
+
+        i = j - 1;  // caller will ++i
+    };
+
+    for (size_t i = 0; i < line.size(); ++i) {
+        char c = line[i];
+
+        switch (st) {
+            case State::Normal:
+                if (c == '|') {
+                    flush();
+                    argv.emplace_back("|");
+                } else if (std::isspace(static_cast<unsigned char>(c))) {
+                    flush();
+                } else if (c == '\'') {
+                    st = State::InSingle;
+                } else if (c == '"') {
+                    st = State::InDouble;
+                } else if (c == '$') {
+                    expandVarAt(i);
+                } else {
+                    cur.push_back(c);
+                }
+                break;
+
+            case State::InSingle:
+                if (c == '\'') {
+                    st = State::Normal;
+                } else {
+                    // No expansion in single quotes.
+                    cur.push_back(c);
+                }
+                break;
+
+            case State::InDouble:
+                if (c == '"') {
+                    st = State::Normal;
+                } else if (c == '$') {
+                    // Expansion is enabled in double quotes.
+                    expandVarAt(i);
+                } else {
+                    cur.push_back(c);
+                }
+                break;
+        }
+    }
+
+    if (st != State::Normal) {
+        throw std::runtime_error("unterminated quote");
+    }
+
+    flush();
+    return argv;
+}
+
 // ---------------- Helpers ----------------
 
 static bool isValidVarName(std::string_view name) {
@@ -160,22 +260,194 @@ int Shell::run(std::istream &in, std::ostream &out, std::ostream &err) {
 }
 
 ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ostream &err) {
-    std::vector<std::string> argv;
+    std::vector<std::string> tokens;
     try {
-        argv = tokenizer_.tokenize(line);
+        tokens = Tokenizer::tokenizeWithPipesAndExpansion(line, env_);
     } catch (const std::exception &e) {
         err << "parse error: " << e.what() << "\n";
         return ExecResult{2, false};
     }
 
-    if (argv.empty())
+    if (tokens.empty())
         return ExecResult{0, false};
 
-    if (tryHandleAssignmentsOnly(argv, err)) {
+    // Split by pipes.
+    std::vector<std::vector<std::string>> stages;
+    std::vector<std::string> cur;
+    for (const auto &t : tokens) {
+        if (t == "|") {
+            if (cur.empty()) {
+                err << "parse error: empty command in pipeline\n";
+                return ExecResult{2, false};
+            }
+            stages.push_back(cur);
+            cur.clear();
+        } else {
+            cur.push_back(t);
+        }
+    }
+    if (!cur.empty())
+        stages.push_back(cur);
+    if (stages.empty())
         return ExecResult{0, false};
+
+    // Single command: keep part-1 behavior.
+    if (stages.size() == 1) {
+        const auto &argv = stages[0];
+        if (tryHandleAssignmentsOnly(argv, err)) {
+            return ExecResult{0, false};
+        }
+        return executeArgv(argv, out, err);
     }
 
-    return executeArgv(argv, out, err);
+    // Pipeline execution:
+    // - stdout is piped stage-to-stage.
+    // - stderr of all stages goes to one shared pipe and is collected by parent.
+    // - final stdout is collected by parent and written into 'out' stream.
+    // - exit code is exit code of last stage.
+
+    int errPipe[2] = {-1, -1};
+    if (::pipe(errPipe) != 0) {
+        err << "pipe: " << errnoMessage() << "\n";
+        return ExecResult{127, false};
+    }
+
+    int outPipe[2] = {-1, -1};
+    if (::pipe(outPipe) != 0) {
+        ::close(errPipe[0]);
+        ::close(errPipe[1]);
+        err << "pipe: " << errnoMessage() << "\n";
+        return ExecResult{127, false};
+    }
+
+    std::vector<pid_t> pids;
+    pids.reserve(stages.size());
+    int prevRead = -1;
+
+    for (size_t i = 0; i < stages.size(); ++i) {
+        int nextPipe[2] = {-1, -1};
+        const bool isLast = (i + 1 == stages.size());
+        if (!isLast) {
+            if (::pipe(nextPipe) != 0) {
+                err << "pipe: " << errnoMessage() << "\n";
+                if (prevRead != -1)
+                    ::close(prevRead);
+                ::close(errPipe[0]);
+                ::close(errPipe[1]);
+                ::close(outPipe[0]);
+                ::close(outPipe[1]);
+                return ExecResult{127, false};
+            }
+        }
+
+        pid_t pid = ::fork();
+        if (pid < 0) {
+            err << "fork failed: " << errnoMessage() << "\n";
+            if (prevRead != -1)
+                ::close(prevRead);
+            if (!isLast) {
+                ::close(nextPipe[0]);
+                ::close(nextPipe[1]);
+            }
+            ::close(errPipe[0]);
+            ::close(errPipe[1]);
+            ::close(outPipe[0]);
+            ::close(outPipe[1]);
+            return ExecResult{127, false};
+        }
+
+        if (pid == 0) {
+            // Child.
+            // stderr -> shared errPipe
+            ::dup2(errPipe[1], STDERR_FILENO);
+
+            // stdin
+            if (prevRead != -1) {
+                ::dup2(prevRead, STDIN_FILENO);
+            }
+
+            // stdout
+            if (isLast) {
+                ::dup2(outPipe[1], STDOUT_FILENO);
+            } else {
+                ::dup2(nextPipe[1], STDOUT_FILENO);
+            }
+
+            // Close fds we don't need.
+            if (prevRead != -1)
+                ::close(prevRead);
+            if (!isLast) {
+                ::close(nextPipe[0]);
+                ::close(nextPipe[1]);
+            }
+            ::close(errPipe[0]);
+            ::close(errPipe[1]);
+            ::close(outPipe[0]);
+            ::close(outPipe[1]);
+
+            // Execute stage. We intentionally do not exit the whole REPL
+            // even if the stage is 'exit' (it only exits this process).
+            ExecResult r = executeArgv(stages[i], std::cout, std::cerr);
+            _exit(r.exitCode);
+        }
+
+        // Parent.
+        pids.push_back(pid);
+        if (prevRead != -1)
+            ::close(prevRead);
+
+        if (!isLast) {
+            ::close(nextPipe[1]);
+            prevRead = nextPipe[0];
+        } else {
+            prevRead = -1;
+        }
+    }
+
+    // Parent: close write ends for collectors.
+    ::close(errPipe[1]);
+    ::close(outPipe[1]);
+
+    // Collect stdout and stderr.
+    auto drainFdToStream = [](int fd, std::ostream &os) {
+        char buf[4096];
+        while (true) {
+            ssize_t n = ::read(fd, buf, sizeof(buf));
+            if (n <= 0)
+                break;
+            os.write(buf, static_cast<std::streamsize>(n));
+        }
+    };
+
+    drainFdToStream(outPipe[0], out);
+    drainFdToStream(errPipe[0], err);
+
+    ::close(outPipe[0]);
+    ::close(errPipe[0]);
+
+    int lastExitCode = 0;
+    for (size_t i = 0; i < pids.size(); ++i) {
+        int status = 0;
+        if (::waitpid(pids[i], &status, 0) < 0) {
+            err << "waitpid failed: " << errnoMessage() << "\n";
+            lastExitCode = 127;
+            continue;
+        }
+        if (WIFEXITED(status)) {
+            int code = WEXITSTATUS(status);
+            if (i + 1 == pids.size())
+                lastExitCode = code;
+        } else if (WIFSIGNALED(status)) {
+            int code = 128 + WTERMSIG(status);
+            if (i + 1 == pids.size())
+                lastExitCode = code;
+        } else {
+            if (i + 1 == pids.size())
+                lastExitCode = 127;
+        }
+    }
+
+    return ExecResult{lastExitCode, false};
 }
 
 Environment &Shell::env() {
@@ -257,6 +529,12 @@ ExecResult Shell::builtinEcho(const std::vector<std::string> &argv,
 ExecResult Shell::builtinCat(const std::vector<std::string> &argv,
                              std::ostream &out,
                              std::ostream &err) {
+    if (argv.size() == 1) {
+        // Read from stdin.
+        out << std::cin.rdbuf();
+        return ExecResult{0, false};
+    }
+
     if (argv.size() != 2) {
         err << "cat: usage: cat <FILE>\n";
         return ExecResult{2, false};
@@ -275,15 +553,19 @@ ExecResult Shell::builtinCat(const std::vector<std::string> &argv,
 ExecResult Shell::builtinWc(const std::vector<std::string> &argv,
                             std::ostream &out,
                             std::ostream &err) {
-    if (argv.size() != 2) {
+    std::istream *in = &std::cin;
+    std::ifstream file;
+
+    if (argv.size() == 2) {
+        file.open(argv[1], std::ios::binary);
+        if (!file) {
+            err << "wc: cannot open file: " << argv[1] << "\n";
+            return ExecResult{1, false};
+        }
+        in = &file;
+    } else if (argv.size() != 1) {
         err << "wc: usage: wc <FILE>\n";
         return ExecResult{2, false};
-    }
-
-    std::ifstream file(argv[1], std::ios::binary);
-    if (!file) {
-        err << "wc: cannot open file: " << argv[1] << "\n";
-        return ExecResult{1, false};
     }
 
     std::uint64_t lines = 0;
@@ -292,7 +574,7 @@ ExecResult Shell::builtinWc(const std::vector<std::string> &argv,
 
     bool inWord = false;
     char ch;
-    while (file.get(ch)) {
+    while (in->get(ch)) {
         ++bytes;
         if (ch == '\n')
             ++lines;

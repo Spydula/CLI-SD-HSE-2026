@@ -45,7 +45,11 @@ if(BUILD_TESTING)
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googletest)
 
-  add_executable(unit_tests tests/shell_tests.cpp)
+  add_executable(unit_tests
+      tests/shell_tests.cpp
+      tests/expansion_tests.cpp
+      tests/pipeline_tests.cpp
+  )
   target_link_libraries(unit_tests PRIVATE shell_lib GTest::gtest_main)
   
   include(GoogleTest)

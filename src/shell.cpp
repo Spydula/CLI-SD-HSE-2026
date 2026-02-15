@@ -119,7 +119,8 @@ std::vector<std::string> Tokenizer::tokenize(std::string_view line) {
     return argv;
 }
 
-std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line, const Environment &env) {
+std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line,
+                                                                  const Environment &env) {
     enum class State { Normal, InSingle, InDouble };
 
     State st = State::Normal;

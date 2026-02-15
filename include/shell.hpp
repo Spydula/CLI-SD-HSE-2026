@@ -80,7 +80,9 @@ public:
      *        Кавычки: одинарные блокируют подстановки, двойные разрешают.
      * @throws std::runtime_error при незакрытых кавычках.
      */
-    static std::vector<std::string> tokenizeWithPipesAndExpansion(std::string_view line, const Environment &env);
+    static std::vector<std::string> tokenizeWithPipesAndExpansion(std::string_view line,
+                                                                  const Environment &env);
+
 };
 
 

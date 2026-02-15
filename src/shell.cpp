@@ -367,7 +367,10 @@ ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ost
             ::close(outPipe[1]);
 
             ExecResult r = executeArgv(stages[i], std::cout, std::cerr);
+            std::cout.flush();
+            std::cerr.flush();
             _exit(r.exitCode);
+
         }
 
         pids.push_back(pid);

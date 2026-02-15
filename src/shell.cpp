@@ -370,7 +370,6 @@ ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ost
             std::cout.flush();
             std::cerr.flush();
             _exit(r.exitCode);
-
         }
 
         pids.push_back(pid);

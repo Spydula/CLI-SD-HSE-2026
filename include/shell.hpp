@@ -82,9 +82,7 @@ public:
      */
     static std::vector<std::string> tokenizeWithPipesAndExpansion(std::string_view line,
                                                                   const Environment &env);
-
 };
-
 
 
 /**

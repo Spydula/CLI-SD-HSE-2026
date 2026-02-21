@@ -419,7 +419,7 @@ auto Shell::runExternal(const std::vector<std::string> &argv, std::ostream &err)
     std::vector<char *> args;
     args.reserve(argsStorage.size() + 1U);
     std::transform(argsStorage.begin(), argsStorage.end(), std::back_inserter(args),
-                   [](std::string &arg) { return arg.data(); });
+                   [](const std::string &arg) { return arg.data(); });
 
     args.push_back(nullptr);
 
@@ -432,7 +432,7 @@ auto Shell::runExternal(const std::vector<std::string> &argv, std::ostream &err)
     std::vector<char *> envp;
     envp.reserve(envStorage.size() + 1U);
     std::transform(envStorage.begin(), envStorage.end(), std::back_inserter(envp),
-                   [](std::string &entry) { return entry.data(); });
+                   [](const std::string &entry) { return entry.data(); });
     envp.push_back(nullptr);
 
     const pid_t childPid = ::fork();

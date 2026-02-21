@@ -19,7 +19,7 @@ struct Token {
  */
 class Lexer {
 public:
-    std::vector<Token> tokenize(std::string_view line, const Environment &env) const;
+    static auto tokenize(std::string_view line, const Environment &env) -> std::vector<Token>;
 };
 
 }  // namespace minishell

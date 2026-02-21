@@ -12,10 +12,10 @@ namespace minishell {
  */
 class Executor {
 public:
-    ExecResult execute(const std::vector<std::vector<std::string>> &stages,
-                       Shell &shell,
-                       std::ostream &out,
-                       std::ostream &err) const;
+    static auto execute(const std::vector<std::vector<std::string>> &stages,
+                        Shell &shell,
+                        std::ostream &out,
+                        std::ostream &err) -> ExecResult;
 };
 
 }  // namespace minishell

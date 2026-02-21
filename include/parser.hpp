@@ -11,7 +11,7 @@ namespace minishell {
  */
 class Parser {
 public:
-    std::vector<std::vector<std::string>> parse(const std::vector<Token> &tokens) const;
+    static auto parse(const std::vector<Token> &tokens) -> std::vector<std::vector<std::string>>;
 };
 
 }  // namespace minishell

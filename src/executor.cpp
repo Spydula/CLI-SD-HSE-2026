@@ -1,160 +1,193 @@
 #include "executor.hpp"
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
+
+#include <array>
 #include <cerrno>
+#include <cstddef>
 #include <iostream>
 #include <system_error>
 #include <vector>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 namespace minishell {
+namespace {
 
-static std::string errnoMessage() {
+constexpr int kExitCommandNotFound = 127;
+constexpr int kExitSignalBase = 128;
+constexpr std::size_t kIoBufferSize = 4096;
+
+auto errnoMessage() -> std::string {
     return std::system_error(errno, std::generic_category()).what();
 }
 
-ExecResult Executor::execute(const std::vector<std::vector<std::string>> &stages,
-                             Shell &shell,
-                             std::ostream &out,
-                             std::ostream &err) const {
+auto makePipe(std::array<int, 2> &pipeFds) -> bool {
+    pipeFds = {-1, -1};
+    return ::pipe(pipeFds.data()) == 0;
+}
+
+auto closeIfOpen(int &fileDescriptor) -> void {
+    if (fileDescriptor != -1) {
+        ::close(fileDescriptor);
+        fileDescriptor = -1;
+    }
+}
+
+auto closePipe(std::array<int, 2> &pipeFds) -> void {
+    closeIfOpen(pipeFds[0]);
+    closeIfOpen(pipeFds[1]);
+}
+
+auto drainFdToStream(int fileDescriptor, std::ostream &outputStream) -> void {
+    std::array<char, kIoBufferSize> buffer{};
+    while (true) {
+        const ssize_t bytesRead = ::read(fileDescriptor, buffer.data(), buffer.size());
+        if (bytesRead <= 0) {
+            break;
+        }
+        outputStream.write(buffer.data(), static_cast<std::streamsize>(bytesRead));
+    }
+}
+
+auto statusToExitCode(int status) -> int {
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    if (WIFSIGNALED(status)) {
+        return kExitSignalBase + WTERMSIG(status);
+    }
+    return kExitCommandNotFound;
+}
+
+auto waitAll(const std::vector<pid_t> &processIds, std::ostream &err) -> int {
+    int lastExitCode = 0;
+    for (std::size_t processIndex = 0; processIndex < processIds.size(); ++processIndex) {
+        int status = 0;
+        if (::waitpid(processIds[processIndex], &status, 0) < 0) {
+            err << "waitpid failed: " << errnoMessage() << "\n";
+            if (processIndex + 1U == processIds.size()) {
+                lastExitCode = kExitCommandNotFound;
+            }
+            continue;
+        }
+        if (processIndex + 1U == processIds.size()) {
+            lastExitCode = statusToExitCode(status);
+        }
+    }
+    return lastExitCode;
+}
+
+[[noreturn]] auto execStage(const std::vector<std::string> &argv,
+                            Shell &shell,
+                            int inputFd,
+                            int outputFd,
+                            int errorFd) -> void {
+    if (inputFd != STDIN_FILENO) {
+        ::dup2(inputFd, STDIN_FILENO);
+    }
+    if (outputFd != STDOUT_FILENO) {
+        ::dup2(outputFd, STDOUT_FILENO);
+    }
+    if (errorFd != STDERR_FILENO) {
+        ::dup2(errorFd, STDERR_FILENO);
+    }
+
+    const ExecResult stageResult = shell.executeArgv(argv, IoStreams{std::cout, std::cerr});
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(stageResult.exitCode);
+}
+
+}  // namespace
+
+auto Executor::execute(const std::vector<std::vector<std::string>> &stages,
+                       Shell &shell,
+                       std::ostream &out,
+                       std::ostream &err) -> ExecResult {
     if (stages.empty()) {
         return ExecResult{0, false};
     }
-    if (stages.size() == 1) {
-        return shell.executeArgv(stages[0], out, err);
+    if (stages.size() == 1U) {
+        return shell.executeArgv(stages.front(), IoStreams{out, err});
     }
 
-    int errPipe[2] = {-1, -1};
-    if (::pipe(errPipe) != 0) {
+    std::array<int, 2> errorPipe{};
+    std::array<int, 2> outputPipe{};
+    if (!makePipe(errorPipe)) {
         err << "pipe: " << errnoMessage() << "\n";
-        return ExecResult{127, false};
+        return ExecResult{kExitCommandNotFound, false};
     }
-    int outPipe[2] = {-1, -1};
-    if (::pipe(outPipe) != 0) {
-        ::close(errPipe[0]);
-        ::close(errPipe[1]);
+    if (!makePipe(outputPipe)) {
+        closePipe(errorPipe);
         err << "pipe: " << errnoMessage() << "\n";
-        return ExecResult{127, false};
+        return ExecResult{kExitCommandNotFound, false};
     }
 
-    std::vector<pid_t> pids;
-    pids.reserve(stages.size());
+    std::vector<pid_t> processIds;
+    processIds.reserve(stages.size());
 
-    int prevRead = -1;
-    for (std::size_t i = 0; i < stages.size(); ++i) {
-        int nextPipe[2] = {-1, -1};
-        const bool isLast = (i + 1 == stages.size());
-        if (!isLast) {
-            if (::pipe(nextPipe) != 0) {
+    int previousReadFd = -1;
+
+    for (std::size_t stageIndex = 0; stageIndex < stages.size(); ++stageIndex) {
+        const bool isLastStage = (stageIndex + 1U == stages.size());
+
+        std::array<int, 2> nextPipe{};
+        if (!isLastStage) {
+            if (!makePipe(nextPipe)) {
+                closeIfOpen(previousReadFd);
+                closePipe(errorPipe);
+                closePipe(outputPipe);
                 err << "pipe: " << errnoMessage() << "\n";
-                if (prevRead != -1)
-                    ::close(prevRead);
-                ::close(errPipe[0]);
-                ::close(errPipe[1]);
-                ::close(outPipe[0]);
-                ::close(outPipe[1]);
-                return ExecResult{127, false};
+                return ExecResult{kExitCommandNotFound, false};
             }
         }
 
-        pid_t pid = ::fork();
-        if (pid < 0) {
+        const pid_t processId = ::fork();
+        if (processId < 0) {
+            closeIfOpen(previousReadFd);
+            if (!isLastStage) {
+                closePipe(nextPipe);
+            }
+            closePipe(errorPipe);
+            closePipe(outputPipe);
             err << "fork failed: " << errnoMessage() << "\n";
-            if (prevRead != -1)
-                ::close(prevRead);
-            if (!isLast) {
-                ::close(nextPipe[0]);
-                ::close(nextPipe[1]);
-            }
-            ::close(errPipe[0]);
-            ::close(errPipe[1]);
-            ::close(outPipe[0]);
-            ::close(outPipe[1]);
-            return ExecResult{127, false};
+            return ExecResult{kExitCommandNotFound, false};
         }
 
-        if (pid == 0) {
-            ::dup2(errPipe[1], STDERR_FILENO);
+        if (processId == 0) {
+            closeIfOpen(errorPipe[0]);
+            closeIfOpen(outputPipe[0]);
 
-            if (prevRead != -1) {
-                ::dup2(prevRead, STDIN_FILENO);
-            }
-            if (isLast) {
-                ::dup2(outPipe[1], STDOUT_FILENO);
-            } else {
-                ::dup2(nextPipe[1], STDOUT_FILENO);
+            const int inputFd = (previousReadFd != -1) ? previousReadFd : STDIN_FILENO;
+            const int outputFd = isLastStage ? outputPipe[1] : nextPipe[1];
+            const int errorFd = errorPipe[1];
+
+            if (!isLastStage) {
+                closeIfOpen(nextPipe[0]);
             }
 
-            if (prevRead != -1)
-                ::close(prevRead);
-            if (!isLast) {
-                ::close(nextPipe[0]);
-                ::close(nextPipe[1]);
-            }
-            ::close(errPipe[0]);
-            ::close(errPipe[1]);
-            ::close(outPipe[0]);
-            ::close(outPipe[1]);
-
-            ExecResult r = shell.executeArgv(stages[i], std::cout, std::cerr);
-            std::cout.flush();
-            std::cerr.flush();
-            _exit(r.exitCode);
+            execStage(stages[stageIndex], shell, inputFd, outputFd, errorFd);
         }
 
-        pids.push_back(pid);
-        if (prevRead != -1)
-            ::close(prevRead);
+        processIds.push_back(processId);
+        closeIfOpen(previousReadFd);
 
-        if (!isLast) {
-            ::close(nextPipe[1]);
-            prevRead = nextPipe[0];
-        } else {
-            prevRead = -1;
+        if (!isLastStage) {
+            closeIfOpen(nextPipe[1]);
+            previousReadFd = nextPipe[0];
         }
     }
 
-    ::close(errPipe[1]);
-    ::close(outPipe[1]);
+    closeIfOpen(errorPipe[1]);
+    closeIfOpen(outputPipe[1]);
 
-    auto drainFdToStream = [](int fd, std::ostream &os) {
-        char buf[4096];
-        while (true) {
-            ssize_t n = ::read(fd, buf, sizeof(buf));
-            if (n <= 0)
-                break;
-            os.write(buf, static_cast<std::streamsize>(n));
-        }
-    };
+    drainFdToStream(outputPipe[0], out);
+    drainFdToStream(errorPipe[0], err);
 
-    drainFdToStream(outPipe[0], out);
-    drainFdToStream(errPipe[0], err);
+    closeIfOpen(outputPipe[0]);
+    closeIfOpen(errorPipe[0]);
 
-    ::close(outPipe[0]);
-    ::close(errPipe[0]);
-
-    int lastExitCode = 0;
-    for (std::size_t i = 0; i < pids.size(); ++i) {
-        int status = 0;
-        if (::waitpid(pids[i], &status, 0) < 0) {
-            err << "waitpid failed: " << errnoMessage() << "\n";
-            lastExitCode = 127;
-            continue;
-        }
-        if (WIFEXITED(status)) {
-            int code = WEXITSTATUS(status);
-            if (i + 1 == pids.size())
-                lastExitCode = code;
-        } else if (WIFSIGNALED(status)) {
-            int code = 128 + WTERMSIG(status);
-            if (i + 1 == pids.size())
-                lastExitCode = code;
-        } else {
-            if (i + 1 == pids.size())
-                lastExitCode = 127;
-        }
-    }
-
+    const int lastExitCode = waitAll(processIds, err);
     return ExecResult{lastExitCode, false};
 }
 

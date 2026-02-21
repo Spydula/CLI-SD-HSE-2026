@@ -1,36 +1,36 @@
 #include "parser.hpp"
+
 #include <stdexcept>
 
 namespace minishell {
 
-std::vector<std::vector<std::string>> Parser::parse(const std::vector<Token> &tokens) const {
+auto Parser::parse(const std::vector<Token> &tokens) -> std::vector<std::vector<std::string>> {
     std::vector<std::vector<std::string>> stages;
-    std::vector<std::string> cur;
+    std::vector<std::string> current;
 
-    auto pushStage = [&]() {
-        if (cur.empty()) {
+    const auto pushStage = [&]() {
+        if (current.empty()) {
             throw std::runtime_error("empty command in pipeline");
         }
-        stages.push_back(cur);
-        cur.clear();
+        stages.push_back(current);
+        current.clear();
     };
 
     bool sawAnything = false;
-    for (const auto &t : tokens) {
-        if (t.type == Token::Type::Pipe) {
+    for (const auto &token : tokens) {
+        if (token.type == Token::Type::Pipe) {
             if (!sawAnything) {
-                // leading pipe
                 throw std::runtime_error("empty command in pipeline");
             }
             pushStage();
         } else {
             sawAnything = true;
-            cur.push_back(t.text);
+            current.push_back(token.text);
         }
     }
 
-    if (!cur.empty()) {
-        stages.push_back(cur);
+    if (!current.empty()) {
+        stages.push_back(current);
     } else if (sawAnything) {
         throw std::runtime_error("empty command in pipeline");
     }

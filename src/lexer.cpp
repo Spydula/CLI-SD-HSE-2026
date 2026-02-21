@@ -1,70 +1,73 @@
 #include "lexer.hpp"
-#include <cctype>
-#include <stdexcept>
+
 #include "expander.hpp"
 #include "shell.hpp"
 
+#include <cstdint>
+#include <stdexcept>
+
 namespace minishell {
 
-std::vector<Token> Lexer::tokenize(std::string_view line, const Environment &env) const {
-    enum class State { Normal, InSingle, InDouble };
-    State st = State::Normal;
+auto Lexer::tokenize(std::string_view line, const Environment &env) -> std::vector<Token> {
+    enum class State : std::uint8_t { Normal, InSingle, InDouble };
+    State state = State::Normal;
 
     std::vector<Token> tokens;
-    std::string cur;
+    std::string current;
 
-    auto flush = [&]() {
-        if (!cur.empty()) {
-            tokens.push_back(Token{Token::Type::Word, cur});
-            cur.clear();
+    const auto flushCurrent = [&]() {
+        if (!current.empty()) {
+            tokens.push_back(Token{Token::Type::Word, current});
+            current.clear();
         }
     };
 
-    for (std::size_t i = 0; i < line.size(); ++i) {
-        char c = line[i];
+    for (std::size_t index = 0; index < line.size(); ++index) {
+        const char ch = line[index];
 
-        switch (st) {
+        switch (state) {
             case State::Normal:
-                if (c == '|') {
-                    flush();
+                if (ch == '|') {
+                    flushCurrent();
                     tokens.push_back(Token{Token::Type::Pipe, ""});
-                } else if (c == ' ' || c == '\t') {
-                    flush();
-                } else if (c == '\'') {
-                    st = State::InSingle;
-                } else if (c == '"') {
-                    st = State::InDouble;
-                } else if (c == '$') {
-                    Expander::expandAt(cur, line, i, env);
+                } else if (ch == ' ' || ch == '\t') {
+                    flushCurrent();
+                } else if (ch == '\'') {
+                    state = State::InSingle;
+                } else if (ch == '"') {
+                    state = State::InDouble;
+                } else if (ch == '$') {
+                    Expander::expandAt(current, line, index, env);
                 } else {
-                    cur.push_back(c);
+                    current.push_back(ch);
                 }
                 break;
 
             case State::InSingle:
-                if (c == '\'') {
-                    st = State::Normal;
+                if (ch == '\'') {
+                    state = State::Normal;
                 } else {
-                    cur.push_back(c);
+                    current.push_back(ch);
                 }
                 break;
 
             case State::InDouble:
-                if (c == '"') {
-                    st = State::Normal;
-                } else if (c == '$') {
-                    Expander::expandAt(cur, line, i, env);
+                if (ch == '"') {
+                    state = State::Normal;
+                } else if (ch == '$') {
+                    Expander::expandAt(current, line, index, env);
                 } else {
-                    cur.push_back(c);
+                    current.push_back(ch);
                 }
                 break;
         }
     }
 
-    if (st != State::Normal) {
+    if (state != State::Normal) {
         throw std::runtime_error("unterminated quote");
     }
-    flush();
+
+    flushCurrent();
     return tokens;
 }
 

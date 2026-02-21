@@ -9,6 +9,8 @@
 
 namespace minishell {
 
+class Executor;  // defined in executor.hpp
+
 /**
  * @brief Хранилище переменных окружения интерпретатора.
  *
@@ -123,6 +125,7 @@ public:
     const Environment &env() const;
 
 private:
+    friend class Executor;  // executor needs to run per-stage commands
     /**
      * @brief Выполнить уже разобранный argv.
      */

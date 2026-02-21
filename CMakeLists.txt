@@ -9,7 +9,13 @@ option(ENABLE_STRICT "Enable strict compilation flags" OFF)
 option(ENABLE_SANITIZERS "Enable Address/Undefined sanitizers" OFF)
 option(BUILD_TESTING "Build unit tests" ON)
 
-add_library(shell_lib src/shell.cpp)
+add_library(shell_lib
+  src/shell.cpp
+  src/expander.cpp
+  src/lexer.cpp
+  src/parser.cpp
+  src/executor.cpp
+)
 target_include_directories(shell_lib PUBLIC include)
 
 add_executable(mini_shell src/main.cpp)

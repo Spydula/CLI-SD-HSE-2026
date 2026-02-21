@@ -1,7 +1,7 @@
+#include "executor.hpp"
+#include "lexer.hpp"
+#include "parser.hpp"
 #include "shell.hpp"
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
 #include <cctype>
 #include <cerrno>
 #include <cstdint>
@@ -12,6 +12,9 @@
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #if defined(__APPLE__)
 #include <crt_externs.h>
@@ -77,7 +80,7 @@ std::vector<std::string> Tokenizer::tokenize(std::string_view line) {
         }
     };
 
-    for (size_t i = 0; i < line.size(); ++i) {
+    for (std::size_t i = 0; i < line.size(); ++i) {
         char c = line[i];
 
         switch (st) {
@@ -121,96 +124,19 @@ std::vector<std::string> Tokenizer::tokenize(std::string_view line) {
 
 std::vector<std::string> Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line,
                                                                   const Environment &env) {
-    enum class State { Normal, InSingle, InDouble };
+    Lexer lex;
+    auto tokens = lex.tokenize(line, env);
 
-    State st = State::Normal;
-    std::vector<std::string> argv;
-    std::string cur;
-
-    auto flush = [&]() {
-        if (!cur.empty()) {
-            argv.push_back(cur);
-            cur.clear();
-        }
-    };
-
-    auto expandVarAt = [&](size_t &i) {
-        size_t j = i + 1;
-        if (j >= line.size()) {
-            cur.push_back('$');
-            return;
-        }
-
-        auto isAlphaUnd = [](unsigned char ch) { return std::isalpha(ch) || ch == '_'; };
-        auto isAlnumUnd = [](unsigned char ch) { return std::isalnum(ch) || ch == '_'; };
-
-        if (!isAlphaUnd(static_cast<unsigned char>(line[j]))) {
-            cur.push_back('$');
-            return;
-        }
-
-        std::string name;
-        name.push_back(static_cast<char>(line[j]));
-        ++j;
-        while (j < line.size() && isAlnumUnd(static_cast<unsigned char>(line[j]))) {
-            name.push_back(static_cast<char>(line[j]));
-            ++j;
-        }
-
-        if (auto v = env.get(name); v.has_value()) {
-            cur += *v;
-        }
-
-        i = j - 1;
-    };
-
-    for (size_t i = 0; i < line.size(); ++i) {
-        char c = line[i];
-
-        switch (st) {
-            case State::Normal:
-                if (c == '|') {
-                    flush();
-                    argv.emplace_back("|");
-                } else if (std::isspace(static_cast<unsigned char>(c))) {
-                    flush();
-                } else if (c == '\'') {
-                    st = State::InSingle;
-                } else if (c == '"') {
-                    st = State::InDouble;
-                } else if (c == '$') {
-                    expandVarAt(i);
-                } else {
-                    cur.push_back(c);
-                }
-                break;
-
-            case State::InSingle:
-                if (c == '\'') {
-                    st = State::Normal;
-                } else {
-                    cur.push_back(c);
-                }
-                break;
-
-            case State::InDouble:
-                if (c == '"') {
-                    st = State::Normal;
-                } else if (c == '$') {
-                    expandVarAt(i);
-                } else {
-                    cur.push_back(c);
-                }
-                break;
+    std::vector<std::string> out;
+    out.reserve(tokens.size());
+    for (const auto &t : tokens) {
+        if (t.type == Token::Type::Pipe) {
+            out.emplace_back("|");
+        } else {
+            out.push_back(t.text);
         }
     }
-
-    if (st != State::Normal) {
-        throw std::runtime_error("unterminated quote");
-    }
-
-    flush();
-    return argv;
+    return out;
 }
 
 // ---------------- Helpers ----------------
@@ -254,178 +180,34 @@ int Shell::run(std::istream &in, std::ostream &out, std::ostream &err) {
 }
 
 ExecResult Shell::executeLine(std::string_view line, std::ostream &out, std::ostream &err) {
-    std::vector<std::string> tokens;
+    Lexer lex;
+    Parser parser;
+    Executor exec;
+
+    std::vector<Token> tokens;
+    std::vector<std::vector<std::string>> stages;
     try {
-        tokens = Tokenizer::tokenizeWithPipesAndExpansion(line, env_);
+        tokens = lex.tokenize(line, env_);
+        stages = parser.parse(tokens);
     } catch (const std::exception &e) {
         err << "parse error: " << e.what() << "\n";
         return ExecResult{2, false};
     }
 
-    if (tokens.empty())
+    if (stages.empty()) {
         return ExecResult{0, false};
-
-    std::vector<std::vector<std::string>> stages;
-    std::vector<std::string> cur;
-    for (const auto &t : tokens) {
-        if (t == "|") {
-            if (cur.empty()) {
-                err << "parse error: empty command in pipeline\n";
-                return ExecResult{2, false};
-            }
-            stages.push_back(cur);
-            cur.clear();
-        } else {
-            cur.push_back(t);
-        }
     }
-    if (!cur.empty())
-        stages.push_back(cur);
-    if (stages.empty())
-        return ExecResult{0, false};
 
     if (stages.size() == 1) {
         const auto &argv = stages[0];
+        if (argv.empty())
+            return ExecResult{0, false};
         if (tryHandleAssignmentsOnly(argv, err)) {
             return ExecResult{0, false};
         }
-        return executeArgv(argv, out, err);
     }
 
-    int errPipe[2] = {-1, -1};
-    if (::pipe(errPipe) != 0) {
-        err << "pipe: " << errnoMessage() << "\n";
-        return ExecResult{127, false};
-    }
-
-    int outPipe[2] = {-1, -1};
-    if (::pipe(outPipe) != 0) {
-        ::close(errPipe[0]);
-        ::close(errPipe[1]);
-        err << "pipe: " << errnoMessage() << "\n";
-        return ExecResult{127, false};
-    }
-
-    std::vector<pid_t> pids;
-    pids.reserve(stages.size());
-    int prevRead = -1;
-
-    for (size_t i = 0; i < stages.size(); ++i) {
-        int nextPipe[2] = {-1, -1};
-        const bool isLast = (i + 1 == stages.size());
-        if (!isLast) {
-            if (::pipe(nextPipe) != 0) {
-                err << "pipe: " << errnoMessage() << "\n";
-                if (prevRead != -1)
-                    ::close(prevRead);
-                ::close(errPipe[0]);
-                ::close(errPipe[1]);
-                ::close(outPipe[0]);
-                ::close(outPipe[1]);
-                return ExecResult{127, false};
-            }
-        }
-
-        pid_t pid = ::fork();
-        if (pid < 0) {
-            err << "fork failed: " << errnoMessage() << "\n";
-            if (prevRead != -1)
-                ::close(prevRead);
-            if (!isLast) {
-                ::close(nextPipe[0]);
-                ::close(nextPipe[1]);
-            }
-            ::close(errPipe[0]);
-            ::close(errPipe[1]);
-            ::close(outPipe[0]);
-            ::close(outPipe[1]);
-            return ExecResult{127, false};
-        }
-
-        if (pid == 0) {
-            ::dup2(errPipe[1], STDERR_FILENO);
-
-            if (prevRead != -1) {
-                ::dup2(prevRead, STDIN_FILENO);
-            }
-
-            if (isLast) {
-                ::dup2(outPipe[1], STDOUT_FILENO);
-            } else {
-                ::dup2(nextPipe[1], STDOUT_FILENO);
-            }
-
-            if (prevRead != -1)
-                ::close(prevRead);
-            if (!isLast) {
-                ::close(nextPipe[0]);
-                ::close(nextPipe[1]);
-            }
-            ::close(errPipe[0]);
-            ::close(errPipe[1]);
-            ::close(outPipe[0]);
-            ::close(outPipe[1]);
-
-            ExecResult r = executeArgv(stages[i], std::cout, std::cerr);
-            std::cout.flush();
-            std::cerr.flush();
-            _exit(r.exitCode);
-        }
-
-        pids.push_back(pid);
-        if (prevRead != -1)
-            ::close(prevRead);
-
-        if (!isLast) {
-            ::close(nextPipe[1]);
-            prevRead = nextPipe[0];
-        } else {
-            prevRead = -1;
-        }
-    }
-
-    ::close(errPipe[1]);
-    ::close(outPipe[1]);
-
-    auto drainFdToStream = [](int fd, std::ostream &os) {
-        char buf[4096];
-        while (true) {
-            ssize_t n = ::read(fd, buf, sizeof(buf));
-            if (n <= 0)
-                break;
-            os.write(buf, static_cast<std::streamsize>(n));
-        }
-    };
-
-    drainFdToStream(outPipe[0], out);
-    drainFdToStream(errPipe[0], err);
-
-    ::close(outPipe[0]);
-    ::close(errPipe[0]);
-
-    int lastExitCode = 0;
-    for (size_t i = 0; i < pids.size(); ++i) {
-        int status = 0;
-        if (::waitpid(pids[i], &status, 0) < 0) {
-            err << "waitpid failed: " << errnoMessage() << "\n";
-            lastExitCode = 127;
-            continue;
-        }
-        if (WIFEXITED(status)) {
-            int code = WEXITSTATUS(status);
-            if (i + 1 == pids.size())
-                lastExitCode = code;
-        } else if (WIFSIGNALED(status)) {
-            int code = 128 + WTERMSIG(status);
-            if (i + 1 == pids.size())
-                lastExitCode = code;
-        } else {
-            if (i + 1 == pids.size())
-                lastExitCode = 127;
-        }
-    }
-
-    return ExecResult{lastExitCode, false};
+    return exec.execute(stages, *this, out, err);
 }
 
 Environment &Shell::env() {

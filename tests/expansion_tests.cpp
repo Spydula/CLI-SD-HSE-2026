@@ -2,48 +2,56 @@
 #include <sstream>
 #include "shell.hpp"
 
-using namespace minishell;
+class ExpansionTest : public ::testing::Test {
+protected:
+    minishell::Shell shell;
+    std::stringstream out;
+    std::stringstream err;
 
-TEST(Expansion, SimpleVariableExpansion) {
-    Shell shell;
+    void TearDown() override {
+        out.str("");
+        out.clear();
+        err.str("");
+        err.clear();
+    }
+};
+
+// тесты на подстановки переменных окружения
+
+TEST_F(ExpansionTest, SimpleVariableExpansion) {
     shell.env().set("X", "hello");
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("echo $X", out, err);
+    minishell::ExecResult res = shell.executeLine("echo $X", out, err);
 
-    EXPECT_EQ(r.exitCode, 0);
-    EXPECT_FALSE(r.shouldExit);
+    EXPECT_EQ(res.exitCode, 0);
+    EXPECT_FALSE(res.shouldExit);
     EXPECT_EQ(out.str(), "hello\n");
 }
 
-TEST(Expansion, NoExpansionInSingleQuotes) {
-    Shell shell;
+TEST_F(ExpansionTest, NoExpansionInSingleQuotes) {
     shell.env().set("X", "hello");
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("echo '$X'", out, err);
+    minishell::ExecResult res = shell.executeLine("echo '$X'", out, err);
 
-    EXPECT_EQ(r.exitCode, 0);
+    EXPECT_EQ(res.exitCode, 0);
+    EXPECT_FALSE(res.shouldExit);
     EXPECT_EQ(out.str(), "$X\n");
 }
 
-TEST(Expansion, ExpansionInDoubleQuotes) {
-    Shell shell;
+TEST_F(ExpansionTest, ExpansionInDoubleQuotes) {
     shell.env().set("X", "hello world");
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("echo \"$X\"", out, err);
+    minishell::ExecResult res = shell.executeLine("echo \"$X\"", out, err);
 
-    EXPECT_EQ(r.exitCode, 0);
+    EXPECT_EQ(res.exitCode, 0);
+    EXPECT_FALSE(res.shouldExit);
     EXPECT_EQ(out.str(), "hello world\n");
 }
 
-TEST(Expansion, MissingVariableExpandsToEmpty) {
-    Shell shell;
+TEST_F(ExpansionTest, MissingVariableExpandsToEmpty) {
+    minishell::ExecResult res = shell.executeLine("echo $UNKNOWN", out, err);
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("echo $UNKNOWN", out, err);
-
-    EXPECT_EQ(r.exitCode, 0);
+    EXPECT_EQ(res.exitCode, 0);
+    EXPECT_FALSE(res.shouldExit);
     EXPECT_EQ(out.str(), "\n");
 }

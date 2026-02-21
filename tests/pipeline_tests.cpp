@@ -2,55 +2,57 @@
 #include <sstream>
 #include "shell.hpp"
 
-using namespace minishell;
+class PipelineTest : public ::testing::Test {
+protected:
+    minishell::Shell shell;
+    std::stringstream out;
+    std::stringstream err;
 
-TEST(Pipeline, EchoToWc) {
-    Shell shell;
+    void TearDown() override {
+        out.str("");
+        out.clear();
+        err.str("");
+        err.clear();
+    }
+};
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("echo 123 | wc", out, err);
+// тесты на пайплайны
 
-    EXPECT_EQ(r.exitCode, 0);
-    EXPECT_FALSE(r.shouldExit);
+TEST_F(PipelineTest, EchoToWc) {
+    minishell::ExecResult res = shell.executeLine("echo 123 | wc", out, err);
+
+    EXPECT_EQ(res.exitCode, 0);
+    EXPECT_FALSE(res.shouldExit);
 
     // wc должен выдать: 1 строка, 1 слово, >=4 байт
     EXPECT_NE(out.str().find("1 1"), std::string::npos);
 }
 
-TEST(Pipeline, MultipleStages) {
-    Shell shell;
+TEST_F(PipelineTest, MultipleStages) {
+    minishell::ExecResult res = shell.executeLine("echo hello | cat | wc", out, err);
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("echo hello | cat | wc", out, err);
+    EXPECT_EQ(res.exitCode, 0);
+    EXPECT_FALSE(res.shouldExit);
 
-    EXPECT_EQ(r.exitCode, 0);
     EXPECT_NE(out.str().find("1 1"), std::string::npos);
 }
 
-TEST(Pipeline, ExitInsidePipelineDoesNotTerminateShell) {
-    Shell shell;
+TEST_F(PipelineTest, ExitInsidePipelineDoesNotTerminateShell) {
+    minishell::ExecResult res = shell.executeLine("echo 1 | exit", out, err);
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("echo 1 | exit", out, err);
-
-    EXPECT_FALSE(r.shouldExit);
+    EXPECT_FALSE(res.shouldExit);
 }
 
-TEST(Pipeline, SyntaxErrorEmptyStage) {
-    Shell shell;
+TEST_F(PipelineTest, SyntaxErrorEmptyStage) {
+    minishell::ExecResult res = shell.executeLine("echo 1 || wc", out, err);
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("echo 1 || wc", out, err);
-
-    EXPECT_EQ(r.exitCode, 2);
-    EXPECT_FALSE(r.shouldExit);
+    EXPECT_EQ(res.exitCode, 2);
+    EXPECT_FALSE(res.shouldExit);
 }
 
-TEST(Pipeline, LeadingPipeError) {
-    Shell shell;
+TEST_F(PipelineTest, LeadingPipeError) {
+    minishell::ExecResult res = shell.executeLine("| echo", out, err);
 
-    std::stringstream out, err;
-    ExecResult r = shell.executeLine("| echo", out, err);
-
-    EXPECT_EQ(r.exitCode, 2);
+    EXPECT_EQ(res.exitCode, 2);
+    EXPECT_FALSE(res.shouldExit);
 }

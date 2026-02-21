@@ -198,8 +198,8 @@ auto Tokenizer::tokenize(std::string_view line) -> std::vector<std::string> {
     return argv;
 }
 
-auto Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line, const Environment &env)
-    -> std::vector<std::string> {
+auto Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line,
+                                              const Environment &env) -> std::vector<std::string> {
     const std::vector<Token> tokens = Lexer::tokenize(line, env);
 
     std::vector<std::string> output;
@@ -270,8 +270,7 @@ auto Shell::env() const -> const Environment & {
     return env_;
 }
 
-auto Shell::tryHandleAssignmentsOnly(const std::vector<std::string> &argv, std::ostream &err)
-    -> bool {
+auto Shell::tryHandleAssignmentsOnly(const std::vector<std::string> &argv, std::ostream &err) -> bool {
     for (const auto &arg : argv) {
         const std::size_t pos = arg.find('=');
         if (pos == std::string::npos || pos == 0U) {

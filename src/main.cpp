@@ -6,7 +6,7 @@
  *
  * Создаёт интерпретатор и запускает REPL.
  */
-int main() {
+auto main() -> int {
     minishell::Shell shell;
     return shell.run(std::cin, std::cout, std::cerr);
 }

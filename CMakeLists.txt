@@ -9,7 +9,13 @@ option(ENABLE_STRICT "Enable strict compilation flags" OFF)
 option(ENABLE_SANITIZERS "Enable Address/Undefined sanitizers" OFF)
 option(BUILD_TESTING "Build unit tests" ON)
 
-add_library(shell_lib src/shell.cpp)
+add_library(shell_lib
+  src/shell.cpp
+  src/expander.cpp
+  src/lexer.cpp
+  src/parser.cpp
+  src/executor.cpp
+)
 target_include_directories(shell_lib PUBLIC include)
 
 add_executable(mini_shell src/main.cpp)
@@ -45,7 +51,11 @@ if(BUILD_TESTING)
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googletest)
 
-  add_executable(unit_tests tests/shell_tests.cpp)
+  add_executable(unit_tests
+      tests/shell_tests.cpp
+      tests/expansion_tests.cpp
+      tests/pipeline_tests.cpp
+  )
   target_link_libraries(unit_tests PRIVATE shell_lib GTest::gtest_main)
   
   include(GoogleTest)

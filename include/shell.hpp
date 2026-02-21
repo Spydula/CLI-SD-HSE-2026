@@ -9,6 +9,8 @@
 
 namespace minishell {
 
+class Executor;
+
 /**
  * @brief Хранилище переменных окружения интерпретатора.
  *
@@ -57,6 +59,14 @@ struct ExecResult {
 };
 
 /**
+ * @brief Обёртка над потоками вывода/ошибок, чтобы избежать easily-swappable parameters.
+ */
+struct IoStreams {
+    std::ostream &out;
+    std::ostream &err;
+};
+
+/**
  * @brief Токенизатор командной строки.
  *
  * Поддерживает:
@@ -74,6 +84,14 @@ public:
      * @throws std::runtime_error при незакрытых кавычках.
      */
     static std::vector<std::string> tokenize(std::string_view line);
+
+    /**
+     * @brief Разобрать строку с поддержкой пайпов '|' и подстановок $VAR.
+     *        Кавычки: одинарные блокируют подстановки, двойные разрешают.
+     * @throws std::runtime_error при незакрытых кавычках.
+     */
+    static std::vector<std::string> tokenizeWithPipesAndExpansion(std::string_view line,
+                                                                  const Environment &env);
 };
 
 /**
@@ -115,38 +133,31 @@ public:
     const Environment &env() const;
 
 private:
+    friend class Executor;  // executor needs to run per-stage commands
     /**
      * @brief Выполнить уже разобранный argv.
      */
-    ExecResult executeArgv(const std::vector<std::string> &argv,
-                           std::ostream &out,
-                           std::ostream &err);
+    auto executeArgv(const std::vector<std::string> &argv, IoStreams io) -> ExecResult;
 
     /**
      * @brief Встроенная команда cat.
      */
-    static ExecResult builtinCat(const std::vector<std::string> &argv,
-                                 std::ostream &out,
-                                 std::ostream &err);
+    static ExecResult builtinCat(const std::vector<std::string> &argv, IoStreams io);
 
     /**
      * @brief Встроенная команда echo.
      */
-    static ExecResult builtinEcho(const std::vector<std::string> &argv,
-                                  std::ostream &out,
-                                  std::ostream &err);
+    static ExecResult builtinEcho(const std::vector<std::string> &argv, IoStreams io);
 
     /**
      * @brief Встроенная команда wc.
      */
-    static ExecResult builtinWc(const std::vector<std::string> &argv,
-                                std::ostream &out,
-                                std::ostream &err);
+    static ExecResult builtinWc(const std::vector<std::string> &argv, IoStreams io);
 
     /**
      * @brief Встроенная команда pwd.
      */
-    static ExecResult builtinPwd(std::ostream &out, std::ostream &err);
+    static auto builtinPwd(IoStreams io) -> ExecResult;
 
     /**
      * @brief Встроенная команда exit.
@@ -171,7 +182,6 @@ private:
     bool tryHandleAssignmentsOnly(const std::vector<std::string> &argv, std::ostream &err);
 
     Environment env_;
-    Tokenizer tokenizer_;
 };
 
 }  // namespace minishell

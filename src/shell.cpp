@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdint>
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
@@ -198,8 +200,8 @@ auto Tokenizer::tokenize(std::string_view line) -> std::vector<std::string> {
     return argv;
 }
 
-auto Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line,
-                                              const Environment &env) -> std::vector<std::string> {
+auto Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line, const Environment &env)
+    -> std::vector<std::string> {
     const std::vector<Token> tokens = Lexer::tokenize(line, env);
 
     std::vector<std::string> output;
@@ -235,10 +237,9 @@ auto Shell::run(std::istream &in, std::ostream &out, std::ostream &err) -> int {
 }
 
 auto Shell::executeLine(std::string_view line, std::ostream &out, std::ostream &err) -> ExecResult {
-    std::vector<Token> tokens;
     std::vector<std::vector<std::string>> stages;
     try {
-        tokens = Lexer::tokenize(line, env_);
+        const std::vector<Token> tokens = Lexer::tokenize(line, env_);
         stages = Parser::parse(tokens);
     } catch (const std::exception &ex) {
         err << "parse error: " << ex.what() << "\n";
@@ -270,8 +271,8 @@ auto Shell::env() const -> const Environment & {
     return env_;
 }
 
-auto Shell::tryHandleAssignmentsOnly(const std::vector<std::string> &argv,
-                                     std::ostream &err) -> bool {
+auto Shell::tryHandleAssignmentsOnly(const std::vector<std::string> &argv, std::ostream &err)
+    -> bool {
     for (const auto &arg : argv) {
         const std::size_t pos = arg.find('=');
         if (pos == std::string::npos || pos == 0U) {
@@ -417,22 +418,21 @@ auto Shell::runExternal(const std::vector<std::string> &argv, std::ostream &err)
     argsStorage[0] = fullPath;
     std::vector<char *> args;
     args.reserve(argsStorage.size() + 1U);
-    for (auto &arg : argsStorage) {
-        args.push_back(arg.data());
-    }
+    std::transform(argsStorage.begin(), argsStorage.end(), std::back_inserter(args),
+                   [](std::string &arg) { return arg.data(); });
+
     args.push_back(nullptr);
 
     std::vector<std::string> envStorage;
     envStorage.reserve(env_.snapshot().size());
-    for (const auto &pair : env_.snapshot()) {
-        envStorage.push_back(pair.first + "=" + pair.second);
-    }
+    const auto &snapshot = env_.snapshot();
+    std::transform(snapshot.begin(), snapshot.end(), std::back_inserter(envStorage),
+                   [](const auto &pair) { return pair.first + "=" + pair.second; });
 
     std::vector<char *> envp;
     envp.reserve(envStorage.size() + 1U);
-    for (auto &entry : envStorage) {
-        envp.push_back(entry.data());
-    }
+    std::transform(envStorage.begin(), envStorage.end(), std::back_inserter(envp),
+                   [](std::string &entry) { return entry.data(); });
     envp.push_back(nullptr);
 
     const pid_t childPid = ::fork();

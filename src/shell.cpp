@@ -200,8 +200,8 @@ auto Tokenizer::tokenize(std::string_view line) -> std::vector<std::string> {
     return argv;
 }
 
-auto Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line,
-                                              const Environment &env) -> std::vector<std::string> {
+auto Tokenizer::tokenizeWithPipesAndExpansion(std::string_view line, const Environment &env)
+    -> std::vector<std::string> {
     const std::vector<Token> tokens = Lexer::tokenize(line, env);
 
     std::vector<std::string> output;
@@ -271,8 +271,8 @@ auto Shell::env() const -> const Environment & {
     return env_;
 }
 
-auto Shell::tryHandleAssignmentsOnly(const std::vector<std::string> &argv,
-                                     std::ostream &err) -> bool {
+auto Shell::tryHandleAssignmentsOnly(const std::vector<std::string> &argv, std::ostream &err)
+    -> bool {
     for (const auto &arg : argv) {
         const std::size_t pos = arg.find('=');
         if (pos == std::string::npos || pos == 0U) {
@@ -416,10 +416,10 @@ auto Shell::runExternal(const std::vector<std::string> &argv, std::ostream &err)
 
     std::vector<std::string> argsStorage = argv;
     argsStorage[0] = fullPath;
-    std::vector<char *> args;
+    std::vector<const char *> args;
     args.reserve(argsStorage.size() + 1U);
     std::transform(argsStorage.begin(), argsStorage.end(), std::back_inserter(args),
-                   [](const std::string &arg) { return arg.data(); });
+                   [](const std::string &arg) { return arg.c_str(); });
 
     args.push_back(nullptr);
 
@@ -429,10 +429,10 @@ auto Shell::runExternal(const std::vector<std::string> &argv, std::ostream &err)
     std::transform(snapshot.begin(), snapshot.end(), std::back_inserter(envStorage),
                    [](const auto &pair) { return pair.first + "=" + pair.second; });
 
-    std::vector<char *> envp;
+    std::vector<const char *> envp;
     envp.reserve(envStorage.size() + 1U);
     std::transform(envStorage.begin(), envStorage.end(), std::back_inserter(envp),
-                   [](const std::string &entry) { return entry.data(); });
+                   [](const std::string &entry) { return entry.c_str(); });
     envp.push_back(nullptr);
 
     const pid_t childPid = ::fork();
@@ -442,7 +442,8 @@ auto Shell::runExternal(const std::vector<std::string> &argv, std::ostream &err)
     }
 
     if (childPid == 0) {
-        ::execve(args[0], args.data(), envp.data());
+        ::execve(args[0], const_cast<char *const *>(args.data()),
+                 const_cast<char *const *>(envp.data()));
         _exit(kExitCommandNotFound);
     }
 

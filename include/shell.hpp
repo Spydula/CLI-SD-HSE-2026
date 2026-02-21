@@ -94,6 +94,8 @@ public:
                                                                   const Environment &env);
 };
 
+class Executor;
+
 /**
  * @brief Основной класс интерпретатора: REPL + выполнение команд.
  */

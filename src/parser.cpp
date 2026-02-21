@@ -1,5 +1,4 @@
 #include "parser.hpp"
-
 #include <stdexcept>
 
 namespace minishell {

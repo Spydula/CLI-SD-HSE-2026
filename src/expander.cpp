@@ -1,8 +1,6 @@
 #include "expander.hpp"
-
-#include "shell.hpp"
-
 #include <cctype>
+#include "shell.hpp"
 
 namespace minishell {
 
@@ -16,12 +14,8 @@ void Expander::expandAt(std::string &out,
         return;
     }
 
-    const auto isAlphaUnd = [](unsigned char ch) {
-        return (std::isalpha(ch) != 0) || ch == '_';
-    };
-    const auto isAlnumUnd = [](unsigned char ch) {
-        return (std::isalnum(ch) != 0) || ch == '_';
-    };
+    const auto isAlphaUnd = [](unsigned char ch) { return (std::isalpha(ch) != 0) || ch == '_'; };
+    const auto isAlnumUnd = [](unsigned char ch) { return (std::isalnum(ch) != 0) || ch == '_'; };
 
     if (!isAlphaUnd(static_cast<unsigned char>(line[scanIndex]))) {
         out.push_back('$');
@@ -31,8 +25,7 @@ void Expander::expandAt(std::string &out,
     std::string name;
     name.push_back(static_cast<char>(line[scanIndex]));
     ++scanIndex;
-    while (scanIndex < line.size() &&
-           isAlnumUnd(static_cast<unsigned char>(line[scanIndex]))) {
+    while (scanIndex < line.size() && isAlnumUnd(static_cast<unsigned char>(line[scanIndex]))) {
         name.push_back(static_cast<char>(line[scanIndex]));
         ++scanIndex;
     }

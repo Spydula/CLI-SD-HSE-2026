@@ -16,6 +16,13 @@ public:
                         Shell &shell,
                         std::ostream &out,
                         std::ostream &err) -> ExecResult;
+
+private:
+    [[noreturn]] static auto execStage(const std::vector<std::string> &argv,
+                                       Shell &shell,
+                                       int inputFd,
+                                       int outputFd,
+                                       int errorFd) -> void;
 };
 
 }  // namespace minishell

@@ -1,6 +1,5 @@
-#include "shell.hpp"
-
 #include <iostream>
+#include "shell.hpp"
 
 /**
  * @brief Точка входа приложения.

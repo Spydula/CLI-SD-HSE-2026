@@ -1,11 +1,9 @@
 #include "shell.hpp"
-
-#include "executor.hpp"
-#include "lexer.hpp"
-#include "parser.hpp"
-
-#include <cerrno>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <cctype>
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -14,10 +12,9 @@
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
-
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include "executor.hpp"
+#include "lexer.hpp"
+#include "parser.hpp"
 
 #if defined(__APPLE__)
 #include <crt_externs.h>
@@ -41,12 +38,8 @@ auto isValidVarName(std::string_view name) -> bool {
         return false;
     }
 
-    const auto isAlphaUnd = [](unsigned char ch) {
-        return (std::isalpha(ch) != 0) || ch == '_';
-    };
-    const auto isAlnumUnd = [](unsigned char ch) {
-        return (std::isalnum(ch) != 0) || ch == '_';
-    };
+    const auto isAlphaUnd = [](unsigned char ch) { return (std::isalpha(ch) != 0) || ch == '_'; };
+    const auto isAlnumUnd = [](unsigned char ch) { return (std::isalnum(ch) != 0) || ch == '_'; };
 
     if (!isAlphaUnd(static_cast<unsigned char>(name[0]))) {
         return false;
@@ -70,8 +63,7 @@ auto isExecutableFile(const std::filesystem::path &path) -> bool {
     return ::access(path.c_str(), X_OK) == 0;
 }
 
-auto findInPath(const std::string &file, const Environment &env)
-    -> std::optional<std::string> {
+auto findInPath(const std::string &file, const Environment &env) -> std::optional<std::string> {
     // Если в имени есть '/', считаем что это путь и не ищем по PATH.
     if (file.find('/') != std::string::npos) {
         if (isExecutableFile(file)) {
@@ -242,8 +234,7 @@ auto Shell::run(std::istream &in, std::ostream &out, std::ostream &err) -> int {
     return 0;
 }
 
-auto Shell::executeLine(std::string_view line, std::ostream &out, std::ostream &err)
-    -> ExecResult {
+auto Shell::executeLine(std::string_view line, std::ostream &out, std::ostream &err) -> ExecResult {
     std::vector<Token> tokens;
     std::vector<std::vector<std::string>> stages;
     try {

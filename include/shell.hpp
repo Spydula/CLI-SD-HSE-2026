@@ -9,7 +9,7 @@
 
 namespace minishell {
 
-class Executor;  // defined in executor.hpp
+class Executor;
 
 /**
  * @brief Хранилище переменных окружения интерпретатора.
@@ -94,8 +94,6 @@ public:
                                                                   const Environment &env);
 };
 
-class Executor;
-
 /**
  * @brief Основной класс интерпретатора: REPL + выполнение команд.
  */
@@ -144,20 +142,17 @@ private:
     /**
      * @brief Встроенная команда cat.
      */
-    static ExecResult builtinCat(const std::vector<std::string> &argv,
-                                 IoStreams io);
+    static ExecResult builtinCat(const std::vector<std::string> &argv, IoStreams io);
 
     /**
      * @brief Встроенная команда echo.
      */
-    static ExecResult builtinEcho(const std::vector<std::string> &argv,
-                                  IoStreams io);
+    static ExecResult builtinEcho(const std::vector<std::string> &argv, IoStreams io);
 
     /**
      * @brief Встроенная команда wc.
      */
-    static ExecResult builtinWc(const std::vector<std::string> &argv,
-                                IoStreams io);
+    static ExecResult builtinWc(const std::vector<std::string> &argv, IoStreams io);
 
     /**
      * @brief Встроенная команда pwd.

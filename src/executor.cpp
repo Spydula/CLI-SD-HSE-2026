@@ -1,14 +1,13 @@
 #include "executor.hpp"
-
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <array>
 #include <cerrno>
 #include <cstddef>
 #include <iostream>
 #include <system_error>
 #include <vector>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
 namespace minishell {
 namespace {
@@ -77,11 +76,13 @@ auto waitAll(const std::vector<pid_t> &processIds, std::ostream &err) -> int {
     return lastExitCode;
 }
 
-[[noreturn]] auto execStage(const std::vector<std::string> &argv,
-                            Shell &shell,
-                            int inputFd,
-                            int outputFd,
-                            int errorFd) -> void {
+}  // namespace
+
+[[noreturn]] auto Executor::execStage(const std::vector<std::string> &argv,
+                                      Shell &shell,
+                                      int inputFd,
+                                      int outputFd,
+                                      int errorFd) -> void {
     if (inputFd != STDIN_FILENO) {
         ::dup2(inputFd, STDIN_FILENO);
     }
@@ -97,8 +98,6 @@ auto waitAll(const std::vector<pid_t> &processIds, std::ostream &err) -> int {
     std::cerr.flush();
     _exit(stageResult.exitCode);
 }
-
-}  // namespace
 
 auto Executor::execute(const std::vector<std::vector<std::string>> &stages,
                        Shell &shell,
@@ -166,7 +165,7 @@ auto Executor::execute(const std::vector<std::vector<std::string>> &stages,
                 closeIfOpen(nextPipe[0]);
             }
 
-            execStage(stages[stageIndex], shell, inputFd, outputFd, errorFd);
+            Executor::execStage(stages[stageIndex], shell, inputFd, outputFd, errorFd);
         }
 
         processIds.push_back(processId);

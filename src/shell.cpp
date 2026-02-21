@@ -270,7 +270,8 @@ auto Shell::env() const -> const Environment & {
     return env_;
 }
 
-auto Shell::tryHandleAssignmentsOnly(const std::vector<std::string> &argv, std::ostream &err) -> bool {
+auto Shell::tryHandleAssignmentsOnly(const std::vector<std::string> &argv,
+                                     std::ostream &err) -> bool {
     for (const auto &arg : argv) {
         const std::size_t pos = arg.find('=');
         if (pos == std::string::npos || pos == 0U) {

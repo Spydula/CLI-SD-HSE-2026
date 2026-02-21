@@ -3,7 +3,6 @@
 #include <iosfwd>
 #include <string>
 #include <vector>
-
 #include "shell.hpp"
 
 namespace minishell {

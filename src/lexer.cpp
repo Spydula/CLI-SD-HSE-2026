@@ -1,8 +1,8 @@
-#include "expander.hpp"
 #include "lexer.hpp"
-#include "shell.hpp"
 #include <cctype>
 #include <stdexcept>
+#include "expander.hpp"
+#include "shell.hpp"
 
 namespace minishell {
 

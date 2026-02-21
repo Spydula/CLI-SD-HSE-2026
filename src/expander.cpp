@@ -1,6 +1,6 @@
 #include "expander.hpp"
-#include "shell.hpp"
 #include <cctype>
+#include "shell.hpp"
 
 namespace minishell {
 

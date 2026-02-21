@@ -1,7 +1,7 @@
-#include "executor.hpp"
-#include "lexer.hpp"
-#include "parser.hpp"
 #include "shell.hpp"
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <cctype>
 #include <cerrno>
 #include <cstdint>
@@ -12,9 +12,9 @@
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#include "executor.hpp"
+#include "lexer.hpp"
+#include "parser.hpp"
 
 #if defined(__APPLE__)
 #include <crt_externs.h>

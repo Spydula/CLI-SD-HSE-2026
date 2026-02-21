@@ -2,7 +2,6 @@
 
 #include <string>
 #include <vector>
-
 #include "lexer.hpp"
 
 namespace minishell {

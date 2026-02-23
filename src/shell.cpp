@@ -17,6 +17,7 @@
 #include "executor.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
+#include "grep.hpp"
 
 #if defined(__APPLE__)
 #include <crt_externs.h>
@@ -311,6 +312,10 @@ auto Shell::executeArgv(const std::vector<std::string> &argv, IoStreams io) -> E
     }
     if (cmd == "exit") {
         return builtinExit();
+    }
+    
+    if (cmd == "grep") {
+        return Grep::execute(argv, io);
     }
 
     return runExternal(argv, io.err);

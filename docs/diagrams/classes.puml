@@ -1,122 +1,109 @@
 @startuml classes
-title Интерпретатор командной строки — ключевые классы (подстановка до токенизации)
-skinparam shadowing false
-skinparam classAttributeIconSize 0
 
-class Shell {
-  - Environment env
-  - Expander expander
-  - Lexer lexer
-  - Parser parser
-  - Executor executor
-  + int run()
-  + void runLine(string line)
+skinparam class {
+    BackgroundColor<<interface>> LightBlue
+    BorderColor Black
+    ArrowColor Black
+    FontSize 12
 }
 
-' ====== Pre-expansion ======
-class Expander {
-  + string expandLine(string rawLine, Environment env)
-  - string expandVar(string name, Environment env)
-}
-
-note right of Expander
-expandLine выполняет подстановки $NAME с учётом кавычек:
-- в '...' подстановок нет
-- в "..." подстановки есть
-- вне кавычек подстановки есть
-
-Если значение содержит пробелы, Expander
-оборачивает вставку служебными маркерами,
-чтобы Lexer не разделил её на несколько аргументов.
-end note
-
-' ====== Lexing/Parsing ======
-class Lexer {
-  + vector<Token> tokenize(string line)
-}
-
-enum TokenType {
-  WORD
-  PIPE
-  EOL
+' Описание классов
+class Environment {
+    - vars_: map<string, string>
+    + set(name, value)
+    + get(name)
+    + snapshot()
+    + fromProcessEnvironment()
 }
 
 class Token {
-  + TokenType type
-  + string text
+    - text: string
+    - type: Type
+    + Type: WORD, PIPE, EOL
+}
+
+class Tokenizer {
+    + tokenize(line)
+    + tokenizeWithPipesAndExpansion(line, env)
 }
 
 class Parser {
-  + PipelineNode parse(vector<Token> tokens)
-}
-
-class PipelineNode {
-  + vector<CommandNode> commands
+    + parse(tokens)
 }
 
 class CommandNode {
-  + vector<AssignmentNode> assignments
-  + vector<string> words
+    - assignments: vector<AssignmentNode>
+    - words: vector<string>
 }
 
 class AssignmentNode {
-  + string name
-  + string value
+    - name: string
+    - value: string
 }
 
-' ====== Environment ======
-class Environment {
-  - map<string,string> vars
-  + void set(string name, string value)
-  + optional<string> get(string name) const
-  + map<string,string> snapshot() const
+class PipelineNode {
+    - commands: vector<CommandNode>
 }
 
-' ====== Commands ======
-interface IShellCommand {
-  + string name() const
-  + int run(vector<string> argv, int inFd, int outFd, int errFd, Environment& env)
+class ExecPipeline {
+    - stages: vector<CommandInvocation>
 }
 
-class CommandRegistry {
-  - map<string, unique_ptr<IShellCommand>> builtins
-  + void registerCommand(unique_ptr<IShellCommand> cmd)
-  + IShellCommand* find(string name) const
+class CommandInvocation {
+    - program: string
+    - argv: vector<string>
+    - envOverlay: map<string,string>
 }
 
-' ====== Execution ======
 class Executor {
-  - CommandRegistry& registry
-  - ExternalProgramRunner external
-  + int execute(PipelineNode pipeline, Environment& env)
+    + execute(stages, shell, out, err)
 }
 
-class ExternalProgramRunner {
-  + [[noreturn]] void exec(string program, vector<string> argv, map<string,string> env)
+class Shell {
+    + run(in, out, err)
+    + executeLine(line, out, err)
+    + executeArgv(argv, io)
+    + env()
+    + tryHandleAssignmentsOnly(argv, err)
+    + builtinExit()
+    + builtinPwd(io)
+    + builtinEcho(argv, io)
+    + builtinCat(argv, io)
+    + builtinWc(argv, io)
+    + runExternal(argv, err)
 }
 
-Shell --> Expander
-Shell --> Lexer
-Shell --> Parser
-Shell --> Executor
-Shell --> Environment
+class Grep {
+    + execute(argv, io)
+}
 
-Expander --> Environment
-Lexer --> Token
-Token --> TokenType
-Parser --> PipelineNode
-PipelineNode --> CommandNode
-CommandNode --> AssignmentNode
-
-Executor --> CommandRegistry
-CommandRegistry --> IShellCommand
-Executor --> ExternalProgramRunner
-Executor --> Environment
-
-note bottom of IShellCommand
-Используем fd (inFd/outFd/errFd), чтобы:
-- builtins могли работать в пайплайне
-- Executor мог настраивать потоки через dup2
+note right of Shell
+    Встроенные команды:
+    - cat
+    - echo
+    - wc
+    - pwd
+    - exit
+    - grep
 end note
+
+' Связи
+Shell --> Environment : использует
+Shell --> Tokenizer : токенизация
+Shell --> Parser : парсинг
+Shell --> Executor : выполнение
+
+Tokenizer --> Token : возвращает
+Parser --> CommandNode : строит
+Parser --> PipelineNode : строит
+Executor --> CommandInvocation : формирует
+Executor --> Shell : для env()
+
+CommandNode --> AssignmentNode
+CommandNode --> PipelineNode
+CommandInvocation --> ExecPipeline
+
+Shell --> CommandNode : для выполнения
+Shell --> PipelineNode : для выполнения
 
 @enduml

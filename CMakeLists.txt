@@ -15,6 +15,7 @@ add_library(shell_lib
   src/lexer.cpp
   src/parser.cpp
   src/executor.cpp
+  src/grep.cpp
 )
 target_include_directories(shell_lib PUBLIC include)
 
@@ -55,6 +56,7 @@ if(BUILD_TESTING)
       tests/shell_tests.cpp
       tests/expansion_tests.cpp
       tests/pipeline_tests.cpp
+      tests/grep_tests.cpp
   )
   target_link_libraries(unit_tests PRIVATE shell_lib GTest::gtest_main)
   
